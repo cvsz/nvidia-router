@@ -1,7 +1,6 @@
-# NVIDIA Free-Model Router
+# zrouter — NVIDIA Free-Model Router
 
-Enterprise-grade OpenAI-compatible proxy/router for NVIDIA's hosted NIM endpoints
-(https://integrate.api.nvidia.com/v1).
+Enterprise-grade OpenAI-compatible proxy/router for NVIDIA's hosted NIM endpoints (https://integrate.api.nvidia.com/v1).
 
 ## Features
 
@@ -18,29 +17,40 @@ Enterprise-grade OpenAI-compatible proxy/router for NVIDIA's hosted NIM endpoint
 - **GUI** — Tkinter-based desktop GUI (`zcloud-gui.py`)
 - **TUI** — Textual-based terminal UI (`zcloud-tui.py`)
 
-## Installation
+## Quick Start
 
-### From PyPI
+### Prerequisites
+
+- Python 3.10+
+- At least one NVIDIA API key (get free keys at https://build.nvidia.com)
+
+### Installation
+
+#### From PyPI
 
 ```bash
 pip install zrouter
 ```
 
-### From Source
+#### From Source
 
 ```bash
-git clone https://github.com/your-org/zrouter.git
+git clone https://github.com/cvsz/zrouter.git
 cd zrouter
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
 ```
 
-### Docker
+#### Docker
 
 ```bash
 docker build -t zrouter .
-docker run -p 8000:8000 -e NVIDIA_API_KEYS="nvapi-xxx,nvapi-yyy" zrouter
+docker run -d \
+  --name zrouter \
+  -p 8000:8000 \
+  -e NVIDIA_API_KEYS="nvapi-xxx,nvapi-yyy" \
+  zrouter:latest
 ```
 
 ## Usage
@@ -116,5 +126,3 @@ Then point your OpenAI client at `http://localhost:8000/v1`.
 ## License
 
 MIT License
-
-# Auto-generated build timestamp Sun Nov 15 21:49:28 +07 2026

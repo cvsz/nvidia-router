@@ -9,7 +9,7 @@ description = "Free-only router for NVIDIA hosted NIM endpoints with model fallb
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    { name = "NVIDIA Router Team", email = "team@example.com" },
+    { name = "cvsz", email = "cvsz@core" },
 ]
 license = { text = "MIT" }
 keywords = ["nvidia", "nim", "router", "proxy", "llm", "openai", "api", "chat"]

@@ -1,0 +1,72 @@
+# Security Policy
+
+## Supported Versions
+
+| Version | Supported          |
+| ------- | ------------------ |
+| 1.0.x   | :white_check_mark: |
+| < 1.0   | :x:                |
+
+## Reporting a Vulnerability
+
+We take the security of zrouter seriously. If you discover a security vulnerability, please report it to us.
+
+### How to Report
+
+Please do not report security vulnerabilities through public GitHub issues.
+
+Instead, please report them via email to: security@cvsz.local
+
+Include as much of the following information as possible to help us better understand and resolve the issue:
+
+- Type of issue (e.g., buffer overflow, SQL injection, cross-site scripting, etc.)
+- Full paths of source file(s) related to the manifestation of the issue
+- Location of the affected source code (tag/branch/commit or direct URL)
+- Any special configuration required to reproduce the issue
+- Step-by-step instructions to reproduce the issue
+- Proof-of-concept or exploit code (if possible)
+- Impact of the issue, including how an attacker might exploit the vulnerability
+
+This information will help us triage your report more quickly.
+
+## Security Policy
+
+zrouter is designed with security in mind:
+
+- **No hardcoded API keys** - All API keys must be provided via environment variables or provider.json (which is gitignored)
+- **No secrets in Docker images** - provider.json is not copied into Docker images
+- **Token-based authentication** - The proxy server supports optional bearer token authentication via ROUTER_TOKEN environment variable
+- **Input validation** - All request bodies are validated as JSON objects
+- **Request size limits** - Maximum request body size is 16 MiB
+- **Thread-safe** - All shared state is protected by locks
+- **No system command execution** - No shell=True or similar dangerous patterns
+
+## Supported Providers
+
+zrouter supports multiple LLM providers:
+
+| Provider | Base URL | Env Var |
+|----------|----------|---------|
+| NVIDIA | https://integrate.api.nvidia.com/v1 | NVIDIA_API_KEYS |
+| OpenRouter | https://openrouter.ai/api/v1 | OPENROUTER_API_KEYS |
+| Groq | https://api.groq.com/openai/v1 | GROQ_API_KEYS |
+| Together AI | https://api.together.xyz/v1 | TOGETHER_API_KEYS |
+| Google | https://generativelanguage.googleapis.com/v1beta/openai/ | GOOGLE_API_KEYS |
+| DeepSeek | https://api.deepseek.com/v1 | DEEPSEEK_API_KEYS |
+| Meta | https://integrate.api.nvidia.com/v1 | META_API_KEYS |
+| Mistral AI | https://api.mistral.ai/v1 | MISTRAL_API_KEYS |
+| Qwen | https://ap-southeast-1.maas.qwencloudapi.com/compatible-mode/v1 | QWEN_API_KEYS |
+| ZEAZ | https://zeaz.ai/v1 | ZEAZ_API_KEYS |
+| OpenAI | https://api.openai.com/v1 | OPENAI_API_KEYS |
+| Anthropic | https://api.anthropic.com/v1 | ANTHROPIC_API_KEYS |
+| Gemini | https://generativelanguage.googleapis.com/v1beta/openai/ | GEMINI_API_KEYS |
+| Cerebras | https://api.cerebras.ai/v1 | CEREBRAS_API_KEYS |
+
+## Security Best Practices for Users
+
+1. **Never commit API keys** - provider.json is gitignored for a reason
+2. **Use environment variables** - Prefer environment variables over provider.json for production
+3. **Use ROUTER_TOKEN** - Always set ROUTER_TOKEN when running the proxy on public interfaces
+4. **Limit key scope** - Use API keys with the minimum required permissions
+5. **Rotate keys regularly** - Rotate API keys periodically
+6. **Monitor usage** - Check stats endpoint for unusual activity
