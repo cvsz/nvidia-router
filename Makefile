@@ -3,7 +3,7 @@
 # Usage:
 #   make setup          # create venv + install dependencies
 #   make test           # run the test suite
-#   make run            # run nvidia.py (chat example)
+#   make run            # run zrouter.py (chat example)
 #   make serve          # run the OpenAI-compatible proxy
 #   make lint           # ruff check + format check
 #   make format         # ruff format
@@ -21,12 +21,12 @@
 #   make build:exe:win  # build Windows .exe (requires Wine)
 #   make build:android  # build Android package (requires Buildozer)
 #   make build:ios      # build iOS package (requires BeeWare/Kivy, macOS)
-#   make build:zcloud   # build zcloud CLI entry point
-#   make gui            # launch zcloud GUI
-#   make install:zcloud # install zcloud to $(PREFIX)/bin
-#   make uninstall:zcloud # remove zcloud from $(PREFIX)/bin
+#   make build:zrouter   # build zrouter CLI entry point
+#   make gui            # launch zrouter GUI
+#   make install:zrouter # install zrouter to $(PREFIX)/bin
+#   make uninstall:zrouter # remove zrouter from $(PREFIX)/bin
 
-.PHONY: all setup test run serve lint format clean help venv install-deps build build\:all build\:web build\:desktops build\:dev build\:prod build\:ent build\:exe build\:exe\:win build\:gui build\:tui build\:android build\:ios build\:zcloud install\:zcloud uninstall\:zcloud zcloud gui docker\:build docker\:run
+.PHONY: all setup test run serve lint format clean help venv install-deps build build\:all build\:web build\:desktops build\:dev build\:prod build\:ent build\:exe build\:exe\:win build\:gui build\:tui build\:android build\:ios build\:zrouter install\:zrouter uninstall\:zrouter zrouter gui docker\:build docker\:run
 
 PYTHON ?= python3
 VENV := .venv
@@ -56,9 +56,9 @@ help: ## Show this help
 	@echo "  make all          setup + lint + test"
 	@echo
 	@echo "Run targets:"
-	@echo "  make run          run nvidia.py chat (requires NVIDIA_API_KEYS)"
+	@echo "  make run          run zrouter.py chat (requires NVIDIA_API_KEYS)"
 	@echo "  make serve        run the OpenAI-compatible proxy (requires keys)"
-	@echo "  make gui          launch zcloud GUI"
+	@echo "  make gui          launch zrouter GUI"
 	@echo
 	@echo "Model/Provider targets:"
 	@echo "  make models       list catalog models with free/paid/provider metadata"
@@ -82,11 +82,11 @@ help: ## Show this help
 	@echo "  make build:android build Android package (requires Buildozer)"
 	@echo "  make build:ios    build iOS package (requires BeeWare/Kivy, macOS)"
 	@echo
-	@echo "zcloud targets:"
-	@echo "  make build:zcloud  build zcloud CLI entry point"
-	@echo "  make install:zcloud install zcloud to $(PREFIX)/bin"
-	@echo "  make uninstall:zcloud remove zcloud from $(PREFIX)/bin"
-	@echo "  make zcloud        alias for build:zcloud"
+	@echo "zrouter targets:"
+	@echo "  make build:zrouter  build zrouter CLI entry point"
+	@echo "  make install:zrouter install zrouter to $(PREFIX)/bin"
+	@echo "  make uninstall:zrouter remove zrouter from $(PREFIX)/bin"
+	@echo "  make zrouter        alias for build:zrouter"
 	@echo
 	@echo "Docker targets:"
 	@echo "  make docker:build   build Docker image"
@@ -111,46 +111,46 @@ install-deps: ## Install / upgrade pip and project dependencies
 
 test: ## Run the test suite
 	@echo "==> Running tests"
-	$(VENV_PYTHON) -m pytest test_nvidia.py -v
+	$(VENV_PYTHON) -m pytest test_zrouter.py -v
 
 models: ## List catalog models with free/paid/provider metadata
 	@echo "==> Listing catalog models"
-	$(VENV_PYTHON) nvidia.py models
+	$(VENV_PYTHON) zrouter.py models
 
 models-free: ## List only free models
 	@echo "==> Listing free models"
-	$(VENV_PYTHON) nvidia.py models --free
+	$(VENV_PYTHON) zrouter.py models --free
 
 models-paid: ## List only paid models
 	@echo "==> Listing paid models"
-	$(VENV_PYTHON) nvidia.py models --paid
+	$(VENV_PYTHON) zrouter.py models --paid
 
 discover: ## Auto-discover models from NVIDIA API and update models.json (requires NVIDIA_API_KEYS)
 	@echo "==> Discovering models from NVIDIA API"
-	$(VENV_PYTHON) nvidia.py discover
+	$(VENV_PYTHON) zrouter.py discover
 
 models-update: discover ## Alias for discover (update the models catalog)
 
 providers: ## List configured providers with API key counts and base URLs
 	@echo "==> Listing configured providers"
-	$(VENV_PYTHON) nvidia.py providers
+	$(VENV_PYTHON) zrouter.py providers
 
-run: ## Run nvidia.py chat example (set NVIDIA_API_KEYS first)
-	@echo "==> Running nvidia.py chat"
-	$(VENV_PYTHON) nvidia.py chat "write a regex for emails"
+run: ## Run zrouter.py chat example (set NVIDIA_API_KEYS first)
+	@echo "==> Running zrouter.py chat"
+	$(VENV_PYTHON) zrouter.py chat "write a regex for emails"
 
 serve: ## Run the OpenAI-compatible proxy on :8000 (set keys + token first)
 	@echo "==> Starting proxy on http://127.0.0.1:8000/v1"
-	$(VENV_PYTHON) nvidia.py serve --port 8000
+	$(VENV_PYTHON) zrouter.py serve --port 8000
 
 lint: ## Run ruff check and ruff format --check
 	@echo "==> Linting with ruff"
-	$(VENV_PYTHON) -m ruff check nvidia.py test_nvidia.py zcloud-gui.py zcloud-tui.py
-	$(VENV_PYTHON) -m ruff format --check nvidia.py test_nvidia.py zcloud-gui.py zcloud-tui.py
+	$(VENV_PYTHON) -m ruff check zrouter.py test_zrouter.py zrouter-gui.py zrouter-tui.py
+	$(VENV_PYTHON) -m ruff format --check zrouter.py test_zrouter.py zrouter-gui.py zrouter-tui.py
 
 format: ## Format code with ruff
 	@echo "==> Formatting with ruff"
-	$(VENV_PYTHON) -m ruff format nvidia.py test_nvidia.py zcloud-gui.py
+	$(VENV_PYTHON) -m ruff format zrouter.py test_zrouter.py zrouter-gui.py
 
 clean: ## Remove virtualenv, build artifacts, dist, and Python caches
 	@echo "==> Cleaning"
@@ -194,7 +194,7 @@ build\:exe: setup lint test ## Build native CLI executable using PyInstaller
 		--distpath $(DIST)/exe \
 		--workpath $(BUILD)/pyinstaller \
 		--specpath $(BUILD)/pyinstaller \
-		nvidia.py
+		zrouter.py
 	cp nvidia.ico nvidia.png make_icon.py models.json provider.json $(DIST)/exe/
 	@echo "==> Native executable ready: $(DIST)/exe/zrouter"
 	@echo "==> Data files: $(DIST)/exe/models.json, $(DIST)/exe/provider.json, $(DIST)/exe/nvidia.ico, $(DIST)/exe/nvidia.png"
@@ -212,7 +212,7 @@ build\:exe\:win: setup lint test ## Build Windows .exe (requires Wine for cross-
 			--distpath $(DIST)/exe/win \
 			--workpath $(BUILD)/pyinstaller-win \
 			--specpath $(BUILD)/pyinstaller-win \
-			nvidia.py; \
+			zrouter.py; \
 		cp nvidia.ico nvidia.png make_icon.py models.json provider.json $(DIST)/exe/win/; \
 		echo "==> Windows .exe ready: $(DIST)/exe/win/zrouter.exe"; \
 	else \
@@ -230,7 +230,7 @@ build\:gui: setup lint test ## Build GUI executable using PyInstaller
 		--onefile \
 		--windowed \
 		--icon nvidia.ico \
-		--name zcloud-gui \
+		--name zrouter-gui \
 		--distpath $(DIST)/gui \
 		--workpath $(BUILD)/pyinstaller-gui \
 		--specpath $(BUILD)/pyinstaller-gui \
@@ -238,48 +238,48 @@ build\:gui: setup lint test ## Build GUI executable using PyInstaller
 		--add-data "$(CURDIR)/provider.json:." \
 		--add-data "$(CURDIR)/nvidia.ico:." \
 		--add-data "$(CURDIR)/nvidia.png:." \
-		zcloud-gui.py
+		zrouter-gui.py
 	cp nvidia.ico nvidia.png make_icon.py models.json provider.json $(DIST)/gui/
-	@echo "==> GUI executable ready: $(DIST)/gui/zcloud-gui"
+	@echo "==> GUI executable ready: $(DIST)/gui/zrouter-gui"
 
 build\:tui: setup lint test ## Build TUI package with textual
 	@echo "==> Building TUI package"
 	@mkdir -p $(DIST)/tui
 	$(VENV_PIP) install textual rich
-	$(VENV_PYTHON) -m py_compile nvidia.py test_nvidia.py
-	cp nvidia.ico nvidia.png make_icon.py nvidia.py models.json provider.json zcloud $(DIST)/tui/
-	chmod +x $(DIST)/tui/zcloud
+	$(VENV_PYTHON) -m py_compile zrouter.py test_zrouter.py
+	cp nvidia.ico nvidia.png make_icon.py zrouter.py models.json provider.json zrouter $(DIST)/tui/
+	chmod +x $(DIST)/tui/zrouter
 	@echo "==> TUI package ready in $(DIST)/tui/"
-	@echo "==> Run: $(DIST)/tui/zcloud providers"
+	@echo "==> Run: $(DIST)/tui/zrouter providers"
 
 build\:web: setup lint test ## Build web deployment package
 	@echo "==> Building web deployment package"
 	@mkdir -p $(DIST)/web
-	$(VENV_PYTHON) -m py_compile nvidia.py test_nvidia.py zcloud-gui.py
-	cp nvidia.ico nvidia.png make_icon.py nvidia.py zcloud-gui.py models.json provider.json $(DIST)/web/
+	$(VENV_PYTHON) -m py_compile zrouter.py test_zrouter.py zrouter-gui.py
+	cp nvidia.ico nvidia.png make_icon.py zrouter.py zrouter-gui.py models.json provider.json $(DIST)/web/
 	printf 'requests==2.34.2\npytest==9.2.0\nruff==0.17.5\n' > $(DIST)/web/requirements.txt
 	@echo "==> Web package ready in $(DIST)/web/"
-	@echo "==> Run: cd $(DIST)/web && python nvidia.py serve --port 8000"
+	@echo "==> Run: cd $(DIST)/web && python zrouter.py serve --port 8000"
 
 build\:desktops: setup lint test ## Build desktop application packages (.desktop files)
 	@echo "==> Building desktop application packages"
 	@mkdir -p $(DIST)/desktops
-	$(VENV_PYTHON) -m py_compile nvidia.py test_nvidia.py zcloud-gui.py
-	cp nvidia.ico nvidia.png make_icon.py nvidia.py zcloud-gui.py models.json provider.json zcloud $(DIST)/desktops/
-	chmod +x $(DIST)/desktops/zcloud
-	@printf '[Desktop Entry]\nName=zcloud\nComment=NVIDIA Free-Model Router\nExec=zcloud %%f\nIcon=zcloud\nTerminal=false\nType=Application\nCategories=Network;Chat;\n' > $(DIST)/desktops/zcloud.desktop
+	$(VENV_PYTHON) -m py_compile zrouter.py test_zrouter.py zrouter-gui.py
+	cp nvidia.ico nvidia.png make_icon.py zrouter.py zrouter-gui.py models.json provider.json zrouter $(DIST)/desktops/
+	chmod +x $(DIST)/desktops/zrouter
+	@printf '[Desktop Entry]\nName=zrouter\nComment=NVIDIA Free-Model Router\nExec=zrouter %%f\nIcon=zrouter\nTerminal=false\nType=Application\nCategories=Network;Chat;\n' > $(DIST)/desktops/zrouter.desktop
 	@echo "==> Desktop package ready in $(DIST)/desktops/"
-	@echo "==> Desktop entry: $(DIST)/desktops/zcloud.desktop"
+	@echo "==> Desktop entry: $(DIST)/desktops/zrouter.desktop"
 
 build\:dev: setup lint test ## Development build with dev tools
 	@echo "==> Building development variant"
 	$(VENV_PIP) install --upgrade pytest ruff
-	$(VENV_PYTHON) -m py_compile nvidia.py test_nvidia.py zcloud-gui.py
+	$(VENV_PYTHON) -m py_compile zrouter.py test_zrouter.py zrouter-gui.py
 	@mkdir -p $(DIST)/dev
-	cp nvidia.ico nvidia.png make_icon.py nvidia.py zcloud-gui.py test_nvidia.py models.json provider.json zcloud $(DIST)/dev/
-	chmod +x $(DIST)/dev/zcloud
+	cp nvidia.ico nvidia.png make_icon.py zrouter.py zrouter-gui.py test_zrouter.py models.json provider.json zrouter $(DIST)/dev/
+	chmod +x $(DIST)/dev/zrouter
 	@echo "==> Dev build ready in $(DIST)/dev/"
-	@echo "==> Run: $(DIST)/dev/zcloud providers"
+	@echo "==> Run: $(DIST)/dev/zrouter providers"
 
 build\:prod: setup lint test ## Production-optimized build (PyInstaller onefile)
 	@echo "==> Building production variant"
@@ -293,7 +293,7 @@ build\:prod: setup lint test ## Production-optimized build (PyInstaller onefile)
 		--distpath $(DIST)/prod \
 		--workpath $(BUILD)/pyinstaller-prod \
 		--specpath $(BUILD)/pyinstaller-prod \
-		nvidia.py
+		zrouter.py
 	cp nvidia.ico nvidia.png make_icon.py models.json provider.json $(DIST)/prod/
 	@echo "==> Production executable ready: $(DIST)/prod/zrouter"
 
@@ -306,7 +306,7 @@ build\:ent: setup lint test ## Enterprise build with all features
 		--onefile \
 		--windowed \
 		--icon nvidia.ico \
-		--name zcloud-enterprise \
+		--name zrouter-enterprise \
 		--distpath $(DIST)/ent \
 		--workpath $(BUILD)/pyinstaller-ent \
 		--specpath $(BUILD)/pyinstaller-ent \
@@ -314,68 +314,68 @@ build\:ent: setup lint test ## Enterprise build with all features
 		--add-data "$(CURDIR)/provider.json:." \
 		--add-data "$(CURDIR)/nvidia.ico:." \
 		--add-data "$(CURDIR)/nvidia.png:." \
-		zcloud-gui.py
-	cp nvidia.ico nvidia.png make_icon.py nvidia.py zcloud-gui.py models.json provider.json zcloud $(DIST)/ent/
-	chmod +x $(DIST)/ent/zcloud
+		zrouter-gui.py
+	cp nvidia.ico nvidia.png make_icon.py zrouter.py zrouter-gui.py models.json provider.json zrouter $(DIST)/ent/
+	chmod +x $(DIST)/ent/zrouter
 	@echo "==> Enterprise package ready in $(DIST)/ent/"
-	@echo "==> GUI: $(DIST)/ent/zcloud-enterprise"
-	@echo "==> CLI: $(DIST)/ent/zcloud"
+	@echo "==> GUI: $(DIST)/ent/zrouter-enterprise"
+	@echo "==> CLI: $(DIST)/ent/zrouter"
 
 build\:android: setup lint test ## Build Android package (requires Buildozer)
 	@echo "==> Building Android package"
 	@mkdir -p $(DIST)/android
-	$(VENV_PYTHON) -m py_compile nvidia.py test_nvidia.py zcloud-gui.py
-	cp nvidia.ico nvidia.png make_icon.py nvidia.py zcloud-gui.py models.json provider.json zcloud $(DIST)/android/
-	chmod +x $(DIST)/android/zcloud
-	@printf '[app]\ntitle = zcloud\npackage.name = zcloud\npackage.domain = com.nvidia.router\nsource.dir = .\nsource.include_exts = py,png,jpg,kv,atlas\nversion = 1.0\nrequirements = python3,kivy,requests\nosx.python_version = 3\nosx.kivy_version = 2.1.0\nandroid.archs = arm64-v8a\nandroid.api = 31\nandroid.minapi = 24\n' > $(DIST)/android/buildozer.spec
+	$(VENV_PYTHON) -m py_compile zrouter.py test_zrouter.py zrouter-gui.py
+	cp nvidia.ico nvidia.png make_icon.py zrouter.py zrouter-gui.py models.json provider.json zrouter $(DIST)/android/
+	chmod +x $(DIST)/android/zrouter
+	@printf '[app]\ntitle = zrouter\npackage.name = zrouter\npackage.domain = com.nvidia.router\nsource.dir = .\nsource.include_exts = py,png,jpg,kv,atlas\nversion = 1.0\nrequirements = python3,kivy,requests\nosx.python_version = 3\nosx.kivy_version = 2.1.0\nandroid.archs = arm64-v8a\nandroid.api = 31\nandroid.minapi = 24\n' > $(DIST)/android/buildozer.spec
 	@echo "==> Android package ready in $(DIST)/android/"
 	@echo "==> To build APK: cd $(DIST)/android && buildozer android debug"
 
 build\:ios: setup lint test ## Build iOS package (requires BeeWare/Kivy, macOS only)
 	@echo "==> Building iOS package"
 	@mkdir -p $(DIST)/ios
-	$(VENV_PYTHON) -m py_compile nvidia.py test_nvidia.py zcloud-gui.py
-	cp nvidia.ico nvidia.png make_icon.py nvidia.py zcloud-gui.py models.json provider.json zcloud $(DIST)/ios/
-	chmod +x $(DIST)/ios/zcloud
-	@printf '// swift-tools-version:5.5\nimport PackageDescription\n\nlet package = Package(\n    name: "zcloud",\n    platforms: [.iOS(.v15)],\n    products: [\n        .executable(name: "zcloud", targets: ["zcloud"])\n    ],\n    targets: [\n        .executableTarget(\n            name: "zcloud",\n            dependencies: [],\n            path: "."\n        )\n    ]\n)\n' > $(DIST)/ios/Package.swift
+	$(VENV_PYTHON) -m py_compile zrouter.py test_zrouter.py zrouter-gui.py
+	cp nvidia.ico nvidia.png make_icon.py zrouter.py zrouter-gui.py models.json provider.json zrouter $(DIST)/ios/
+	chmod +x $(DIST)/ios/zrouter
+	@printf '// swift-tools-version:5.5\nimport PackageDescription\n\nlet package = Package(\n    name: "zrouter",\n    platforms: [.iOS(.v15)],\n    products: [\n        .executable(name: "zrouter", targets: ["zrouter"])\n    ],\n    targets: [\n        .executableTarget(\n            name: "zrouter",\n            dependencies: [],\n            path: "."\n        )\n    ]\n)\n' > $(DIST)/ios/Package.swift
 	@echo "==> iOS package ready in $(DIST)/ios/"
 	@echo "==> To build: cd $(DIST)/ios && swift build (macOS required)"
 
 # --------------------------------------------------------------------------- #
-# zcloud executable entry point
+# zrouter executable entry point
 # --------------------------------------------------------------------------- #
 
-build\:zcloud: setup lint test ## Build zcloud CLI entry point
-	@echo "==> Building zcloud executable"
-	@chmod +x zcloud
+build\:zrouter: setup lint test ## Build zrouter CLI entry point
+	@echo "==> Building zrouter executable"
+	@chmod +x zrouter
 	@mkdir -p $(DIST)/bin
-	cp zcloud $(DIST)/bin/zcloud
-	cp nvidia.py $(DIST)/bin/nvidia.py
+	cp zrouter $(DIST)/bin/zrouter
+	cp zrouter.py $(DIST)/bin/zrouter.py
 	cp models.json $(DIST)/bin/models.json
 	cp provider.json $(DIST)/bin/provider.json
 	cp nvidia.ico $(DIST)/bin/nvidia.ico
 	cp nvidia.png $(DIST)/bin/nvidia.png
 	cp make_icon.py $(DIST)/bin/make_icon.py
-	@echo "==> zcloud ready: $(DIST)/bin/zcloud"
+	@echo "==> zrouter ready: $(DIST)/bin/zrouter"
 
-install\:zcloud: build\:zcloud ## Install zcloud to /usr/local/bin (or PREFIX)
-	@echo "==> Installing zcloud to $(PREFIX)/bin"
+install\:zrouter: build\:zrouter ## Install zrouter to /usr/local/bin (or PREFIX)
+	@echo "==> Installing zrouter to $(PREFIX)/bin"
 	@mkdir -p "$(PREFIX)/bin"
-	cp zcloud "$(PREFIX)/bin/zcloud"
-	chmod +x "$(PREFIX)/bin/zcloud"
-	@echo "==> Installed. Run: zcloud providers"
+	cp zrouter "$(PREFIX)/bin/zrouter"
+	chmod +x "$(PREFIX)/bin/zrouter"
+	@echo "==> Installed. Run: zrouter providers"
 
-uninstall\:zcloud: ## Remove zcloud from $(PREFIX)/bin
-	@echo "==> Removing zcloud from $(PREFIX)/bin"
-	rm -f "$(PREFIX)/bin/zcloud"
+uninstall\:zrouter: ## Remove zrouter from $(PREFIX)/bin
+	@echo "==> Removing zrouter from $(PREFIX)/bin"
+	rm -f "$(PREFIX)/bin/zrouter"
 	@echo "==> Removed"
 
-zcloud: build\:zcloud ## Alias for build:zcloud
-	@echo "==> zcloud executable at ./zcloud"
+zrouter: build\:zrouter ## Alias for build:zrouter
+	@echo "==> zrouter executable at ./zrouter"
 
-gui: ## Launch zcloud GUI
-	@echo "==> Launching zcloud GUI"
-	$(VENV_PYTHON) zcloud-gui.py
+gui: ## Launch zrouter GUI
+	@echo "==> Launching zrouter GUI"
+	$(VENV_PYTHON) zrouter-gui.py
 
 # --------------------------------------------------------------------------- #
 # Docker targets

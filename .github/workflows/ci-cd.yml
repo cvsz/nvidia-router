@@ -85,6 +85,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: dist/gui/zcloud-gui
-          asset_name: zcloud-gui-linux-x64
+          asset_path: dist/gui/zrouter-gui
+          asset_name: zrouter-gui-linux-x64
           asset_content_type: application/octet-stream

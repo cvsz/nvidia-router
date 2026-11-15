@@ -2,7 +2,7 @@
 """
 zcloud-gui — NVIDIA Free-Model Router GUI
 
-A tkinter-based desktop GUI for the nvidia.py router with:
+A tkinter-based desktop GUI for the zrouter.py router with:
 - API key / provider management
 - Free/paid model listing with filtering
 - Chat interface with auto-routing and streaming
@@ -21,11 +21,13 @@ import time
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, simpledialog, ttk
 
-# Add project root to path so we can import nvidia
+from ttkthemes import ThemedStyle
+
+# Add project root to path so we can import zrouter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import nvidia
-from nvidia import (
+import zrouter
+from zrouter import (
     CATALOG,
     PROVIDERS,
     FreeRouter,
@@ -110,7 +112,7 @@ class NVIDIARouterGUI:
         theme = THEMES[self.theme_name]
         self.root.configure(bg=theme["bg"])
 
-        style = ttk.Style()
+        style = ThemedStyle(self.root)
         style.theme_use("clam")
 
         style.configure("TFrame", background=theme["surface"])
@@ -603,10 +605,10 @@ class NVIDIARouterGUI:
     def _save_settings(self) -> None:
         keys = self.api_keys_text.get("1.0", tk.END).strip()
         os.environ["NVIDIA_API_KEYS"] = keys
-        nvidia.CFG.rpm = self.cfg_rpm.get()
-        nvidia.CFG.cache_ttl = self.cfg_cache_ttl.get()
-        nvidia.CFG.timeout = self.cfg_timeout.get()
-        nvidia.CFG.max_wait = self.cfg_max_wait.get()
+        zrouter.CFG.rpm = self.cfg_rpm.get()
+        zrouter.CFG.cache_ttl = self.cfg_cache_ttl.get()
+        zrouter.CFG.timeout = self.cfg_timeout.get()
+        zrouter.CFG.max_wait = self.cfg_max_wait.get()
         messagebox.showinfo("Settings", "Settings saved.")
 
     # ------------------------------------------------------------------ Providers
@@ -677,7 +679,7 @@ class NVIDIARouterGUI:
         else:
             PROVIDERS.providers[provider] = {
                 "api_keys": [key.strip()],
-                "base_url": base_url or nvidia.CFG.base_url,
+                "base_url": base_url or zrouter.CFG.base_url,
                 "env_var": env_var or f"{provider.upper()}_API_KEYS",
             }
 
@@ -1025,7 +1027,7 @@ class NVIDIARouterGUI:
         messagebox.showinfo(
             "About",
             "zcloud — NVIDIA Free-Model Router GUI\n\n"
-            "A desktop GUI for the nvidia.py router.\n"
+            "A desktop GUI for the zrouter.py router.\n"
             "Routes chats through free NVIDIA NIM models.\n\n"
             "Built with tkinter.",
         )

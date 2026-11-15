@@ -24,14 +24,14 @@ pip install -e .
 export NVIDIA_API_KEYS="nvapi-xxx,nvapi-yyy"
 
 # Run the router
-python nvidia.py chat "hello"
+python zrouter.py chat "hello"
 ```
 
 ### Run as Proxy Server
 
 ```bash
 # Start the OpenAI-compatible proxy
-python nvidia.py serve --port 8000 --token secret
+python zrouter.py serve --port 8000 --token secret
 
 # Test with curl
 curl http://localhost:8000/health
@@ -84,7 +84,7 @@ WorkingDirectory=/opt/zrouter
 Environment=NVIDIA_API_KEYS=nvapi-xxx,nvapi-yyy
 Environment=NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 Environment=NVIDIA_RPM=35
-ExecStart=/opt/zrouter/.venv/bin/python nvidia.py serve --host 0.0.0.0 --port 8000
+ExecStart=/opt/zrouter/.venv/bin/python zrouter.py serve --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
 

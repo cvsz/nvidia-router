@@ -2,7 +2,7 @@
 """
 zcloud-tui — NVIDIA Free-Model Router TUI
 
-A textual-based terminal UI for the nvidia.py router with:
+A textual-based terminal UI for the zrouter.py router with:
 - Chat interface with auto-routing
 - Model listing with free/paid filtering
 - Provider status monitoring
@@ -33,13 +33,13 @@ from textual.widgets import (
     TextArea,
 )
 
-# Add project root to path so we can import nvidia
+# Add project root to path so we can import zrouter
 sys.path.insert(
     0, __import__("os").path.dirname(__import__("os").path.abspath(__file__))
 )
 
-import nvidia
-from nvidia import CATALOG, PROVIDERS, FreeRouter, RouterError
+import zrouter
+from zrouter import CATALOG, PROVIDERS, FreeRouter, RouterError
 
 
 class ChatScreen(Screen):
@@ -158,7 +158,7 @@ class ChatScreen(Screen):
                 router = self.router
                 msgs = [{"role": "user", "content": prompt}]
 
-                from nvidia import Settings
+                from zrouter import Settings
 
                 cfg = Settings()
                 cfg.rpm = int(
@@ -417,7 +417,7 @@ class _KeyInputScreen(Screen):
         else:
             PROVIDERS.providers[provider] = {
                 "api_keys": [key],
-                "base_url": base_url or nvidia.CFG.base_url,
+                "base_url": base_url or zrouter.CFG.base_url,
                 "env_var": env_var or f"{provider.upper()}_API_KEYS",
             }
 

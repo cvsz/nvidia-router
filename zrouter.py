@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nvidia.py  -  free-only router for NVIDIA's hosted NIM endpoints
+zrouter.py  -  free-only router for NVIDIA's hosted NIM endpoints
 (https://integrate.api.nvidia.com/v1)
 
 Enterprise-grade OpenAI-compatible proxy/router with model allowlisting,
@@ -30,13 +30,13 @@ SETUP
     export NVIDIA_API_KEYS="nvapi-aaa,nvapi-bbb"     # or NVIDIA_API_KEY, or --keys-file keys.txt
 
 USAGE
-    python nvidia.py keys
-    python nvidia.py list
-    python nvidia.py probe
-    python nvidia.py chat "write a regex for emails"            # auto route
-    python nvidia.py chat "hi" --route fast --stream
-    python nvidia.py stats
-    python nvidia.py serve --port 8000                          # OpenAI-compatible proxy
+    python zrouter.py keys
+    python zrouter.py list
+    python zrouter.py probe
+    python zrouter.py chat "write a regex for emails"            # auto route
+    python zrouter.py chat "hi" --route fast --stream
+    python zrouter.py stats
+    python zrouter.py serve --port 8000                          # OpenAI-compatible proxy
         # client:  base_url=http://127.0.0.1:8000/v1  api_key=anything (or ROUTER_TOKEN)
         # model:   "auto" | "free-code" | "free-reasoning" | "free-fast" | "free-vision" | "glm-4.7" ...
 
@@ -1390,9 +1390,9 @@ HELP_TOPICS: dict[str, str] = {
 QUICKSTART
   1. Get free key(s) at https://build.nvidia.com  (keys start with nvapi-)
   2. export NVIDIA_API_KEYS="nvapi-aaa,nvapi-bbb"
-  3. python nvidia.py list              # which allowlisted models exist
-  4. python nvidia.py chat "hello"      # auto-routed chat
-  5. python nvidia.py serve             # OpenAI-compatible proxy on :8000
+  3. python zrouter.py list              # which allowlisted models exist
+  4. python zrouter.py chat "hello"      # auto-routed chat
+  5. python zrouter.py serve             # OpenAI-compatible proxy on :8000
 """,
     "keys": """\
 API KEYS
@@ -1403,7 +1403,7 @@ API KEYS
   On HTTP 429 the key is benched (Retry-After honoured) and the SAME model is
   retried on the next key. 401/403 marks a key dead. Keys are always masked in
   output. Use only keys that belong to you or your team.
-  Check state with:  python nvidia.py keys
+  Check state with:  python zrouter.py keys
 """,
     "routes": """\
 ROUTES  (free-only allowlist; first available match wins, then falls back down the list)
@@ -1420,7 +1420,7 @@ ROUTES  (free-only allowlist; first available match wins, then falls back down t
 """,
     "serve": """\
 PROXY SERVER
-  python nvidia.py serve [--host 127.0.0.1] [--port 8000] [--token SECRET]
+  python zrouter.py serve [--host 127.0.0.1] [--port 8000] [--token SECRET]
   Endpoints:
     POST /v1/chat/completions   (stream and non-stream, tools, images)
     POST /v1/embeddings
@@ -1496,7 +1496,7 @@ def print_help_topic(parser: argparse.ArgumentParser, topic: str | None) -> None
 def build_parser() -> argparse.ArgumentParser:
     fmt = argparse.RawDescriptionHelpFormatter
     ap = argparse.ArgumentParser(
-        prog="nvidia.py",
+        prog="zrouter.py",
         formatter_class=fmt,
         epilog=MAIN_EPILOG,
         description="Free-only router for NVIDIA hosted NIM endpoints: model fallback, multi-key "
@@ -1619,7 +1619,7 @@ def main() -> None:
     a = ap.parse_args()
     if a.cmd is None:
         ap.print_help()
-        print("\nNew here? run:  python nvidia.py help quickstart")
+        print("\nNew here? run:  python zrouter.py help quickstart")
         return
     if a.cmd == "help":
         return print_help_topic(ap, a.topic)

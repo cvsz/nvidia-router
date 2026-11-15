@@ -1,8 +1,8 @@
-# Final-Report.md — NVIDIA Free-Model Router (`nvidia/nvidia.py`)
+# Final-Report.md — NVIDIA Free-Model Router (`nvidia/zrouter.py`)
 
 ## บทสรุปผู้บริหาร (Executive Summary)
 
-ระบบเราเตอร์โมเดลฟรีสำหรับ NVIDIA NIM endpoints (`/mnt/zdata/nvidia/nvidia.py`) ได้รับการพัฒนาตั้งแต่ต้นจนจบจนอยู่ในสภาพพร้อมใช้งานจริงระดับองค์กร (enterprise-ready) ผ่านการตรวจสอบคุณภาพโค้ด การทดสอบอัตโนมัติ และการตรวจสอบความมั่นคงปลอดภัยครบถ้วน โดยไม่มีข้อผิดพลาดและคำเตือนเหลืออยู่แม้แต่รายการเดียว
+ระบบเราเตอร์โมเดลฟรีสำหรับ NVIDIA NIM endpoints (`/mnt/zdata/nvidia/zrouter.py`) ได้รับการพัฒนาตั้งแต่ต้นจนจบจนอยู่ในสภาพพร้อมใช้งานจริงระดับองค์กร (enterprise-ready) ผ่านการตรวจสอบคุณภาพโค้ด การทดสอบอัตโนมัติ และการตรวจสอบความมั่นคงปลอดภัยครบถ้วน โดยไม่มีข้อผิดพลาดและคำเตือนเหลืออยู่แม้แต่รายการเดียว
 
 ระบบทำหน้าที่เป็นตัวกลาง (proxy) รองรับ OpenAI client ทุกตัว เชื่อมต่อกับ NVIDIA hosted NIM endpoints (`https://integrate.api.nvidia.com/v1`) โดยคัดเลือกเฉพาะโมเดลที่อยู่ใน allowlist (free-only) เท่านั้น ป้องกันไม่ให้เรียกโมเดลเสียค่าใช้จ่ายโดยไม่ตั้งใจ รองรับการหมุนเวียนคีย์หลายอันเมื่อเจอ HTTP 429 การจำกัดอัตราต่อคีย์ การแบ็กออฟแบบเอ็กซ์โพเนนเชียลต่อคู่ (key, model) การสตรีมแบบ SSE พร้อมการสลับโมเดลก่อนไบต์แรก แคชการตอบสนอง สถิติถาวรต่อโมเดลและต่อคีย์ และเซิร์ฟเวอร์ proxy ภายในเครื่อง
 
@@ -64,8 +64,8 @@
 |------|-----------|---------|-------|
 | คุณภาพโค้ดและไวยากรณ์ | `ruff check` | ผ่านทุกไฟล์ (0 errors, 0 warnings) | ✅ |
 | รูปแบบการจัดวางโค้ด | `ruff format --check` | ไฟล์ถูกจัดรูปแบบเรียบร้อย (0 issues) | ✅ |
-| การประกอบสร้าง | `python3 -m py_compile` | ไฟล์ `nvidia.py` และ `test_nvidia.py` คอมไพล์ได้ถูกต้อง | ✅ |
-| การทดสอบระดับหน่วยย่อย | `pytest test_nvidia.py` | 60 test cases ผ่านทั้งหมด (0 failures) | ✅ |
+| การประกอบสร้าง | `python3 -m py_compile` | ไฟล์ `zrouter.py` และ `test_zrouter.py` คอมไพล์ได้ถูกต้อง | ✅ |
+| การทดสอบระดับหน่วยย่อย | `pytest test_zrouter.py` | 60 test cases ผ่านทั้งหมด (0 failures) | ✅ |
 | การทดสอบการเชื่อมต่อ | Mock NVIDIA server + proxy integration | ตรวจสอบ health endpoint, token auth, stats endpoint แล้ว | ✅ |
 | การตรวจสอบความมั่นคงปลอดภัย | การตรวจสอบเชิงป้องกัน | mask คีย์, จำกัดขนาด request, ปฏิเสธ body ที่ไม่ใช่ JSON object, ปฏิเสธโมเดลที่ไม่อยู่ใน allowlist | ✅ |
 | การแย่งชิงทรัพยากร | การทดสอบเธรดพร้อมกัน 10 เส้นทาง × 10,000 ครั้ง | `Key.ok` ถูกต้องทุกครั้ง (10,000/10,000) | ✅ |
@@ -100,8 +100,8 @@ Total issues (by confidence):
 ```
 /mnt/zdata/
 ├── nvidia/
-│   ├── nvidia.py          # โค้ดหลัก: เราเตอร์ + proxy + CLI (1,022 บรรทัด)
-│   └── test_nvidia.py     # ชุดทดสอบอัตโนมัติ 60 test cases
+│   ├── zrouter.py          # โค้ดหลัก: เราเตอร์ + proxy + CLI (1,022 บรรทัด)
+│   └── test_zrouter.py     # ชุดทดสอบอัตโนมัติ 60 test cases
 ├── model/
 ├── models/
 ├── opcode/
@@ -122,15 +122,15 @@ pip install requests
 export NVIDIA_API_KEYS="nvapi-aaa,nvapi-bbb"
 
 # รันเราเตอร์ในโหมด CLI
-python nvidia/nvidia.py chat "write a regex for emails"         # auto-routed
-python nvidia/nvidia.py chat "hi" --route fast --stream         # streaming
-python nvidia/nvidia.py keys                                    # สถานะคีย์
-python nvidia/nvidia.py list                                    # รายชื่อโมเดล
-python nvidia/nvidia.py probe                                   # ทดสอบทุกโมเดล
-python nvidia/nvidia.py stats                                   # สถิติถาวร
+python nvidia/zrouter.py chat "write a regex for emails"         # auto-routed
+python nvidia/zrouter.py chat "hi" --route fast --stream         # streaming
+python nvidia/zrouter.py keys                                    # สถานะคีย์
+python nvidia/zrouter.py list                                    # รายชื่อโมเดล
+python nvidia/zrouter.py probe                                   # ทดสอบทุกโมเดล
+python nvidia/zrouter.py stats                                   # สถิติถาวร
 
 # รันเป็น OpenAI-compatible proxy
-python nvidia/nvidia.py serve --port 8000 --token SECRET
+python nvidia/zrouter.py serve --port 8000 --token SECRET
 
 # ตัวอย่างการใช้กับ OpenAI client
 #   base_url=http://127.0.0.1:8000/v1

@@ -1,0 +1,3 @@
+[console_scripts]
+zcloud = nvidia:main
+zrouter = nvidia:main

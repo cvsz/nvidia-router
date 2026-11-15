@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Unit tests for /mnt/zdata/nvidia/nvidia.py
-Run with:  cd /mnt/zdata/nvidia && pytest test_nvidia.py -v
+Unit tests for /mnt/zdata/nvidia/zrouter.py
+Run with:  cd /mnt/zdata/nvidia && pytest test_zrouter.py -v
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ from http.server import BaseHTTPRequestHandler
 from typing import ClassVar
 from unittest import mock
 
-import nvidia
-from nvidia import (
+import zrouter
+from zrouter import (
     FreeRouter,
     Key,
     RateLimiter,
@@ -262,18 +262,18 @@ class TestClassifyAndImages(unittest.TestCase):
         self.assertFalse(has_image([{"role": "user", "content": "text only"}]))
 
     def test_text_of_string(self):
-        self.assertEqual(nvidia._text_of("hello"), "hello")
+        self.assertEqual(zrouter._text_of("hello"), "hello")
 
     def test_text_of_list(self):
         self.assertEqual(
-            nvidia._text_of(
+            zrouter._text_of(
                 [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]
             ),
             "a b",
         )
 
     def test_text_of_other(self):
-        self.assertEqual(nvidia._text_of(123), "")
+        self.assertEqual(zrouter._text_of(123), "")
 
 
 class TestSettings(unittest.TestCase):
@@ -315,7 +315,7 @@ class TestLoadKeys(unittest.TestCase):
     def test_load_keys_from_env(self):
         os.environ["NVIDIA_API_KEYS"] = "key1, key2, key1"
         try:
-            keys = nvidia.load_keys(providers_file="/tmp/nonexistent_providers.json")
+            keys = zrouter.load_keys(providers_file="/tmp/nonexistent_providers.json")
             self.assertEqual(len(keys), 2)
             self.assertEqual(keys[0].value, "key1")
             self.assertEqual(keys[1].value, "key2")
@@ -325,7 +325,7 @@ class TestLoadKeys(unittest.TestCase):
     def test_load_keys_empty(self):
         for var in ("NVIDIA_API_KEYS", "NVIDIA_API_KEY"):
             os.environ.pop(var, None)
-        keys = nvidia.load_keys(providers_file="/tmp/nonexistent_providers.json")
+        keys = zrouter.load_keys(providers_file="/tmp/nonexistent_providers.json")
         self.assertEqual(keys, [])
 
 
@@ -460,23 +460,23 @@ class TestReadBody(unittest.TestCase):
         h = self.FakeHandler(
             b'{"model":"m","messages":[{"role":"user","content":"hi"}]}'
         )
-        code, _body = nvidia._read_body(h)
+        code, _body = zrouter._read_body(h)
         self.assertEqual(code, 200)
         self.assertEqual(_body["model"], "m")
 
     def test_read_body_invalid_json(self):
         h = self.FakeHandler(b"not json")
-        code, _body = nvidia._read_body(h)
+        code, _body = zrouter._read_body(h)
         self.assertEqual(code, 400)
 
     def test_read_body_not_dict(self):
         h = self.FakeHandler(b"[1,2,3]")
-        code, _body = nvidia._read_body(h)
+        code, _body = zrouter._read_body(h)
         self.assertEqual(code, 400)
 
     def test_read_body_too_large(self):
-        h = self.FakeHandler(b"{}", content_length=nvidia.MAX_REQUEST_BYTES + 1)
-        code, _body = nvidia._read_body(h)
+        h = self.FakeHandler(b"{}", content_length=zrouter.MAX_REQUEST_BYTES + 1)
+        code, _body = zrouter._read_body(h)
         self.assertEqual(code, 413)
 
 
@@ -587,13 +587,15 @@ class TestSecurity(unittest.TestCase):
         self.assertIn("...", masked)
 
     def test_read_body_rejects_oversized(self):
-        h = TestReadBody.FakeHandler(b"{}", content_length=nvidia.MAX_REQUEST_BYTES + 1)
-        code, _ = nvidia._read_body(h)
+        h = TestReadBody.FakeHandler(
+            b"{}", content_length=zrouter.MAX_REQUEST_BYTES + 1
+        )
+        code, _ = zrouter._read_body(h)
         self.assertEqual(code, 413)
 
     def test_read_body_rejects_non_dict(self):
         h = TestReadBody.FakeHandler(b'"just a string"')
-        code, _ = nvidia._read_body(h)
+        code, _ = zrouter._read_body(h)
         self.assertEqual(code, 400)
 
     def test_plan_rejects_unknown_route(self):

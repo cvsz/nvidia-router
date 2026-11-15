@@ -14,8 +14,8 @@ Enterprise-grade OpenAI-compatible proxy/router for NVIDIA's hosted NIM endpoint
 - **Persistent stats** — Per model / per key: ok, fail, 429, latency
 - **OpenAI-compatible proxy** — Point any OpenAI client at it
 - **CLI** — `chat`, `list`, `probe`, `stats`, `keys`, `serve`, `models`, `discover`, `providers`
-- **GUI** — Tkinter-based desktop GUI (`zcloud-gui.py`)
-- **TUI** — Textual-based terminal UI (`zcloud-tui.py`)
+- **GUI** — Tkinter-based desktop GUI (`zrouter-gui.py`)
+- **TUI** — Textual-based terminal UI (`zrouter-tui.py`)
 
 ## Quick Start
 
@@ -62,28 +62,28 @@ docker run -d \
 export NVIDIA_API_KEYS="nvapi-xxx,nvapi-yyy"
 
 # List available models
-python nvidia.py list
+python zrouter.py list
 
 # Chat with auto-routing
-python nvidia.py chat "write a regex for emails"
+python zrouter.py chat "write a regex for emails"
 
 # Chat with specific route
-python nvidia.py chat "explain TCP slow start" --route reasoning --stream
+python zrouter.py chat "explain TCP slow start" --route reasoning --stream
 
 # Run the OpenAI-compatible proxy
-python nvidia.py serve --port 8000 --token secret
+python zrouter.py serve --port 8000 --token secret
 ```
 
 ### GUI
 
 ```bash
-python zcloud-gui.py
+python zrouter-gui.py
 ```
 
 ### TUI
 
 ```bash
-python zcloud-tui.py
+python zrouter-tui.py
 ```
 
 ### Docker
