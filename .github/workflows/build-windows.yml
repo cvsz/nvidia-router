@@ -1,0 +1,95 @@
+name: Build Windows .exe
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    env:
+      PYTHON_VERSION: '3.14'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pytest ruff pyinstaller
+
+      - name: Build Windows executable
+        run: |
+          pyinstaller --noconfirm --clean --onefile --icon nvidia.ico --name nvidia-router nvidia.py
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-router-windows-exe
+          path: dist/nvidia-router.exe
+
+  build-windows-gui:
+    runs-on: windows-latest
+    env:
+      PYTHON_VERSION: '3.14'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pytest ruff pyinstaller
+
+      - name: Build Windows GUI executable
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --icon nvidia.ico --name zcloud-gui zcloud-gui.py
+
+      - name: Upload Windows GUI executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: zcloud-gui-windows-exe
+          path: dist/zcloud-gui.exe
+
+  release-windows:
+    needs: [build-windows, build-windows-gui]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Windows executable
+        uses: actions/download-artifact@v4
+        with:
+          name: nvidia-router-windows-exe
+          path: dist/
+
+      - name: Download Windows GUI executable
+        uses: actions/download-artifact@v4
+        with:
+          name: zcloud-gui-windows-exe
+          path: dist/
+
+      - name: Release Windows executables
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/nvidia-router.exe dist/zcloud-gui.exe
+          tag_name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
