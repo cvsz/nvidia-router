@@ -1,0 +1,33 @@
+# CODEOWNERS
+
+# Default owner for everything in the repository
+* @cvsz
+
+# Documentation
+/docs/ @cvsz @policedbc
+docs/ @cvsz @policedbc
+
+# Source code
+nvidia.py @cvsz @policedbc
+zcloud-gui.py @cvsz @arin-z
+zcloud-tui.py @cvsz @arin-z
+zcloud @cvsz
+
+# Configuration
+Makefile @cvsz @policedbc
+pyproject.toml @cvsz @policedbc
+requirements.txt @cvsz @policedbc
+Dockerfile @cvsz @policedbc
+
+# CI/CD
+.github/workflows/ @cvsz @policedbc
+
+# Documentation
+README.md @cvsz @policedbc @arin-z
+API.md @cvsz @policedbc
+DEPLOYMENT.md @cvsz @policedbc
+CHANGELOG.md @cvsz @policedbc
+CONTRIBUTING.md @cvsz @policedbc @arin-z
+SECURITY.md @cvsz @policedbc
+CODE_OF_CONDUCT.md @cvsz @policedbc
+LICENSE @cvsz
