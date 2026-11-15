@@ -1,6 +1,5 @@
 LICENSE
 README.md
-nvidia.py
 pyproject.toml
 zrouter.egg-info/PKG-INFO
 zrouter.egg-info/SOURCES.txt

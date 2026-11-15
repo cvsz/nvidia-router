@@ -26,7 +26,7 @@
 #   make install:zrouter # install zrouter to $(PREFIX)/bin
 #   make uninstall:zrouter # remove zrouter from $(PREFIX)/bin
 
-.PHONY: all setup test run serve lint format clean help venv install-deps build build\:all build\:web build\:desktops build\:dev build\:prod build\:ent build\:exe build\:exe\:win build\:gui build\:tui build\:android build\:ios build\:zrouter install\:zrouter uninstall\:zrouter zrouter gui docker\:build docker\:run
+.PHONY: all setup test run serve lint format clean help venv install-deps build build\:all build\:web build\:desktops build\:dev build\:prod build\:ent build\:exe build\:exe\:win build\:gui build\:tui build\:android build\:ios build\:zrouter build\:packages build\:wheel build\:sdist install\:zrouter uninstall\:zrouter zrouter gui docker\:build docker\:run
 
 PYTHON ?= python3
 VENV := .venv
@@ -84,6 +84,9 @@ help: ## Show this help
 	@echo
 	@echo "zrouter targets:"
 	@echo "  make build:zrouter  build zrouter CLI entry point"
+	@echo "  make build:packages   build Python packages (wheel + sdist)"
+	@echo "  make build:wheel      build wheel distribution"
+	@echo "  make build:sdist      build source distribution"
 	@echo "  make install:zrouter install zrouter to $(PREFIX)/bin"
 	@echo "  make uninstall:zrouter remove zrouter from $(PREFIX)/bin"
 	@echo "  make zrouter        alias for build:zrouter"
@@ -357,6 +360,24 @@ build\:zrouter: setup lint test ## Build zrouter CLI entry point
 	cp nvidia.png $(DIST)/bin/nvidia.png
 	cp make_icon.py $(DIST)/bin/make_icon.py
 	@echo "==> zrouter ready: $(DIST)/bin/zrouter"
+
+build\:packages: setup lint test ## Build all Python packages (wheel + sdist)
+	@echo "==> Building Python packages"
+	@mkdir -p $(DIST)/packages
+	$(VENV_PYTHON) -m build
+	@echo "==> Python packages ready in $(DIST)/"
+
+build\:wheel: setup lint test ## Build wheel distribution
+	@echo "==> Building wheel package"
+	@mkdir -p $(DIST)/wheel
+	$(VENV_PYTHON) -m pip wheel --no-deps --wheel-dir $(DIST)/wheel .
+	@echo "==> Wheel package ready in $(DIST)/wheel/"
+
+build\:sdist: setup lint test ## Build source distribution
+	@echo "==> Building source distribution"
+	@mkdir -p $(DIST)/sdist
+	$(VENV_PYTHON) -m build --sdist --outdir $(DIST)/sdist
+	@echo "==> Source distribution ready in $(DIST)/sdist/"
 
 install\:zrouter: build\:zrouter ## Install zrouter to /usr/local/bin (or PREFIX)
 	@echo "==> Installing zrouter to $(PREFIX)/bin"
