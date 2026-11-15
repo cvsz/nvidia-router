@@ -1,0 +1,1728 @@
+#!/usr/bin/env python3
+"""
+nvidia.py  -  free-only router for NVIDIA's hosted NIM endpoints
+(https://integrate.api.nvidia.com/v1)
+
+Enterprise-grade OpenAI-compatible proxy/router with model allowlisting,
+multi-key rotation, per-key rate limiting, exponential backoff, streaming
+failover, response caching, persistent stats, and an embedded proxy server.
+
+FEATURES
+  * Free-only allowlist (ROUTES). /v1/models does not say what is free, so only
+    models matching your allowlist are ever called.
+  * Routes: general / code / reasoning / fast / vision + "auto" (classifies prompt).
+  * Model fallback chain per route.
+  * Multi-key rotation: on 429 the key is benched (Retry-After honoured) and the
+    SAME model is retried on the next key; dead keys (401/403) are dropped.
+  * Per-key rate limiter, exponential backoff for failing (key, model) pairs,
+    optional wait-and-retry when every key is limited.
+  * Streaming (SSE) with failover before the first byte.
+  * Passthrough of tools / tool_choice / response_format / temperature / images.
+  * Embeddings endpoint (allowlist EMBED_ALLOW).
+  * Response cache (only for temperature == 0, no tools, non-stream).
+  * Persistent stats (per model / per key: ok, fail, 429, latency).
+  * Local OpenAI-compatible proxy server -> point ANY OpenAI client at it.
+  * JSON config file to override routes / limits.
+  * Thread-safe, type-annotated, input-validated, production-hardened.
+
+SETUP
+    pip install requests
+    export NVIDIA_API_KEYS="nvapi-aaa,nvapi-bbb"     # or NVIDIA_API_KEY, or --keys-file keys.txt
+
+USAGE
+    python nvidia.py keys
+    python nvidia.py list
+    python nvidia.py probe
+    python nvidia.py chat "write a regex for emails"            # auto route
+    python nvidia.py chat "hi" --route fast --stream
+    python nvidia.py stats
+    python nvidia.py serve --port 8000                          # OpenAI-compatible proxy
+        # client:  base_url=http://127.0.0.1:8000/v1  api_key=anything (or ROUTER_TOKEN)
+        # model:   "auto" | "free-code" | "free-reasoning" | "free-fast" | "free-vision" | "glm-4.7" ...
+
+CONFIG (optional router.json, via --config or NVIDIA_ROUTER_CONFIG)
+    {"routes": {"code": ["glm-4.7", "deepseek-v3.2"]}, "rpm": 30, "cache_ttl": 600,
+     "deny": ["embed", "guard"], "embed_allow": ["nv-embed"], "max_wait": 30}
+
+Use only keys that belong to you / your team.
+"""
+
+from __future__ import annotations
+
+import argparse
+import collections
+import hashlib
+import json
+import logging
+import os
+import re
+import sys
+import threading
+import time
+from collections.abc import Iterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
+
+import requests
+
+log = logging.getLogger("nvrouter")
+
+
+def _resource_path(filename: str) -> str:
+    """Resolve a data file path, working both from source and PyInstaller bundles."""
+    env_var = {
+        "models.json": "NVIDIA_MODELS_CATALOG",
+        "provider.json": "NVIDIA_PROVIDERS_FILE",
+    }[filename]
+    env_val = os.environ.get(env_var)
+    if env_val:
+        return env_val
+    if getattr(sys, "frozen", False):
+        # Running as PyInstaller bundle: look next to the executable
+        return os.path.join(os.path.dirname(sys.executable), filename)
+    # Running from source: look next to this file
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+
+
+# --------------------------------------------------------------------------- constants
+
+MAX_REQUEST_BYTES = 16 * 1024 * 1024  # 16 MiB hard cap on request body
+DEFAULT_RPM = 35
+DEFAULT_CACHE_TTL = 3600
+DEFAULT_CACHE_SIZE = 256
+DEFAULT_TIMEOUT = 90
+DEFAULT_MAX_WAIT = 60
+DEFAULT_COOLDOWN_429 = 30
+DEFAULT_COOLDOWN_ERR = 60
+PAIR_BACKOFF_CAP = 900
+RETRY_AFTER_CAP = 300
+STATS_DIRTY_THRESHOLD = 20
+MODEL_LIST_TTL = 900
+
+DEFAULT_ROUTES: dict[str, list[str]] = {
+    "general": [
+        "mistral-large-3",
+        "deepseek-v3.2",
+        "glm-4.7",
+        "mistral-small-3.1",
+        "gemma-3-27b",
+    ],
+    "code": [
+        "glm-4.7",
+        "minimax-m2.5",
+        "deepseek-v3.2",
+        "deepseek-v3.1-terminus",
+        "seed-oss-36b",
+    ],
+    "reasoning": [
+        "deepseek-v3.2",
+        "minimax-m2.5",
+        "deepseek-v3.1-terminus",
+        "glm-4.7",
+        "seed-oss-36b",
+    ],
+    "fast": ["gemma-3n-e4b", "gemma-3n-e2b", "mistral-small-3.1", "gemma-3-27b"],
+    "vision": ["gemma-3-27b", "gemma-3n-e4b", "mistral-small-3.1"],
+}
+DEFAULT_DENY: list[str] = [
+    "embed",
+    "guard",
+    "safety",
+    "pii",
+    "rerank",
+    "clip",
+    "flux",
+    "cosmos",
+    "voice",
+    "esm",
+    "dino",
+]
+DEFAULT_EMBED_ALLOW: list[str] = ["nv-embed"]
+
+
+class RouterError(Exception):
+    """Raised for HTTP-mappable router failures with an explicit status code."""
+
+    def __init__(self, status: int, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+        self.message = message
+
+
+def mask(key: str) -> str:
+    """Return a masked representation of an API key for logging / display."""
+    if not key:
+        return "***"
+    if len(key) <= 16:
+        return "***"
+    return key[:9] + "..." + key[-4:]
+
+
+# --------------------------------------------------------------------------- helpers
+
+
+class RateLimiter:
+    """Per-key token-bucket style rate limiter (requests per minute)."""
+
+    def __init__(self, rpm: int) -> None:
+        self.min_interval = 60.0 / max(rpm, 1)
+        self.last = 0.0
+        self.lock = threading.Lock()
+
+    def wait(self) -> None:
+        with self.lock:
+            delay = self.last + self.min_interval - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            self.last = time.monotonic()
+
+
+class Key:
+    """A single API key with thread-safe rate limiting, bench state, and counters."""
+
+    def __init__(
+        self,
+        value: str,
+        provider: str = "NVIDIA",
+        base_url: str | None = None,
+    ) -> None:
+        self.value = value
+        self.provider = provider
+        self.base_url = base_url or CFG.base_url
+        self.limiter = RateLimiter(DEFAULT_RPM)
+        self._lock = threading.Lock()
+        self.benched_until = 0.0
+        self.dead = False
+        self.ok = 0
+        self.fail = 0
+        self.hits_429 = 0
+
+    @property
+    def label(self) -> str:
+        return mask(self.value)
+
+    def is_ready(self, now: float | None = None) -> bool:
+        with self._lock:
+            t = now if now is not None else time.time()
+            return (not self.dead) and t >= self.benched_until
+
+    def mark_dead(self) -> None:
+        with self._lock:
+            self.dead = True
+
+    def bench(self, seconds: float) -> None:
+        with self._lock:
+            self.benched_until = max(self.benched_until, time.time() + seconds)
+
+    def record_ok(self) -> None:
+        with self._lock:
+            self.ok += 1
+
+    def record_fail(self) -> None:
+        with self._lock:
+            self.fail += 1
+
+    def record_429(self) -> None:
+        with self._lock:
+            self.hits_429 += 1
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "label": self.label,
+                "provider": self.provider,
+                "base_url": self.base_url,
+                "dead": self.dead,
+                "benched_until": self.benched_until,
+                "ok": self.ok,
+                "fail": self.fail,
+                "hits_429": self.hits_429,
+            }
+
+
+def load_keys(
+    keys_file: str | None = None,
+    providers_file: str | None = None,
+) -> list[Key]:
+    """Load and de-duplicate API keys from env, keys file, and provider.json."""
+    raw: list[str] = []
+    for var in ("NVIDIA_API_KEYS", "NVIDIA_API_KEY"):
+        raw += re.split(r"[,\s]+", os.environ.get(var, ""))
+    if keys_file:
+        with open(keys_file, encoding="utf-8") as f:
+            for line in f:
+                raw += re.split(r"[,\s]+", line.split("#", 1)[0].strip())
+
+    # Load keys from provider.json
+    providers_cfg = ProviderConfig(providers_file or PROVIDERS_PATH)
+    for provider, base_url, key in providers_cfg.all_keys():
+        raw.append(key)
+        # Also check the provider's env_var for additional keys
+        cfg = providers_cfg.get(provider)
+        env_var = str(cfg["env_var"]) if cfg else ""
+        if env_var:
+            raw += re.split(r"[,\s]+", os.environ.get(env_var, ""))
+
+    deduped = [k.strip() for k in raw if k.strip()]
+    return [Key(k) for k in dict.fromkeys(deduped)]
+
+
+# --------------------------------------------------------------------------- stats
+
+
+class Stats:
+    """Per-model / per-key counters, persisted atomically as JSON."""
+
+    def __init__(self, path: str | None = None) -> None:
+        home = os.environ.get(
+            "NVIDIA_ROUTER_HOME", os.path.expanduser("~/.nvidia_free_router")
+        )
+        self.path = path or os.path.join(home, "stats.json")
+        self.lock = threading.Lock()
+        self.dirty = 0
+        self.data: dict[str, Any] = {"models": {}, "keys": {}}
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    self.data = loaded
+        except (OSError, ValueError):
+            pass
+
+    def rec(
+        self, model: str, key_label: str, outcome: str, latency: float | None = None
+    ) -> None:
+        if outcome not in ("ok", "fail", "429"):
+            raise ValueError(f"invalid outcome: {outcome!r}")
+        with self.lock:
+            m = self.data["models"].setdefault(
+                model, {"ok": 0, "fail": 0, "429": 0, "lat_sum": 0.0}
+            )
+            k = self.data["keys"].setdefault(key_label, {"ok": 0, "fail": 0, "429": 0})
+            m[outcome] += 1
+            k[outcome] += 1
+            if outcome == "ok" and latency is not None:
+                m["lat_sum"] += latency
+            self.dirty += 1
+            if self.dirty >= STATS_DIRTY_THRESHOLD:
+                self._save()
+
+    def _save(self) -> None:
+        try:
+            directory = os.path.dirname(self.path)
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+            tmp = self.path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, indent=1)
+            os.replace(tmp, self.path)
+            self.dirty = 0
+        except OSError:
+            log.exception("failed to persist stats to %s", self.path)
+
+    def flush(self) -> None:
+        with self.lock:
+            if self.dirty:
+                self._save()
+
+    def snapshot(self) -> dict[str, Any]:
+        with self.lock:
+            return json.loads(json.dumps(self.data))
+
+
+# --------------------------------------------------------------------------- cache
+
+
+class TTLCache:
+    """Thread-safe TTL + LRU cache with bounded size."""
+
+    def __init__(self, size: int, ttl: int) -> None:
+        self.size = max(size, 0)
+        self.ttl = max(ttl, 0)
+        self.d: collections.OrderedDict[str, tuple[float, Any]] = (
+            collections.OrderedDict()
+        )
+        self.lock = threading.Lock()
+
+    def get(self, k: str) -> Any | None:
+        with self.lock:
+            v = self.d.get(k)
+            if not v:
+                return None
+            expiry, val = v
+            if time.time() > expiry:
+                del self.d[k]
+                return None
+            self.d.move_to_end(k)
+            return val
+
+    def put(self, k: str, val: Any) -> None:
+        if self.ttl <= 0:
+            return
+        with self.lock:
+            self.d[k] = (time.time() + self.ttl, val)
+            self.d.move_to_end(k)
+            while len(self.d) > self.size:
+                self.d.popitem(last=False)
+
+
+# --------------------------------------------------------------------------- prompt analysis
+
+
+def _text_of(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(
+            p.get("text", "")
+            for p in content
+            if isinstance(p, dict) and p.get("type") == "text"
+        )
+    return ""
+
+
+def has_image(messages: list[dict[str, Any]]) -> bool:
+    return any(
+        isinstance(m.get("content"), list)
+        and any(
+            isinstance(p, dict) and p.get("type") == "image_url" for p in m["content"]
+        )
+        for m in messages
+    )
+
+
+CODE_RE = re.compile(
+    r"```|\bdef \w+\(|\bclass \w+|function\s*\w*\(|traceback|stack ?trace|\bregex\b|\bsql\b|"
+    r"\bpython\b|javascript|typescript|\brust\b|golang|\bbug\b|refactor|compile|\bapi\b|"
+    r"dockerfile|bash script|unit test|\bgit\b",
+    re.IGNORECASE,
+)
+REASON_RE = re.compile(
+    r"step[- ]by[- ]step|\bprove\b|\bderive\b|\bpuzzle\b|\bmath\b|calculate|probability|"
+    r"trade-?offs?|analy[sz]e|reason(ing)? about|logic|optimi[sz]e|\bwhy\b.*\bwork",
+    re.IGNORECASE,
+)
+
+
+def classify(messages: list[dict[str, Any]]) -> str:
+    if has_image(messages):
+        return "vision"
+    last = next(
+        (
+            _text_of(m.get("content"))
+            for m in reversed(messages)
+            if m.get("role") == "user"
+        ),
+        "",
+    )
+    if CODE_RE.search(last):
+        return "code"
+    if REASON_RE.search(last) or len(last) > 3000:
+        return "reasoning"
+    if len(last) < 160:
+        return "fast"
+    return "general"
+
+
+# --------------------------------------------------------------------------- settings
+
+
+class Settings:
+    """Runtime configuration with type-validated overrides from JSON config."""
+
+    def __init__(self) -> None:
+        self.base_url: str = os.environ.get(
+            "NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"
+        )
+        self.routes: dict[str, list[str]] = {
+            k: list(v) for k, v in DEFAULT_ROUTES.items()
+        }
+        self.deny: list[str] = list(DEFAULT_DENY)
+        self.embed_allow: list[str] = list(DEFAULT_EMBED_ALLOW)
+        self.rpm: int = int(os.environ.get("NVIDIA_RPM", str(DEFAULT_RPM)))
+        self.cooldown_429: int = DEFAULT_COOLDOWN_429
+        self.cooldown_err: int = DEFAULT_COOLDOWN_ERR
+        self.max_wait: int = int(
+            os.environ.get("NVIDIA_MAX_WAIT", str(DEFAULT_MAX_WAIT))
+        )
+        self.timeout: int = int(os.environ.get("NVIDIA_TIMEOUT", str(DEFAULT_TIMEOUT)))
+        self.cache_ttl: int = int(
+            os.environ.get("NVIDIA_CACHE_TTL", str(DEFAULT_CACHE_TTL))
+        )
+        self.cache_size: int = int(
+            os.environ.get("NVIDIA_CACHE_SIZE", str(DEFAULT_CACHE_SIZE))
+        )
+
+    def load(self, path: str) -> None:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise TypeError("config root must be a JSON object")
+        for k, v in data.items():
+            if k == "routes":
+                if not isinstance(v, dict):
+                    raise ValueError("config 'routes' must be an object")
+                self.routes.update({str(kk): list(vv) for kk, vv in v.items()})
+            elif k == "deny":
+                self.deny = list(v)
+            elif k == "embed_allow":
+                self.embed_allow = list(v)
+            elif k == "rpm":
+                self.rpm = int(v)
+            elif k == "cooldown_429":
+                self.cooldown_429 = int(v)
+            elif k == "cooldown_err":
+                self.cooldown_err = int(v)
+            elif k == "max_wait":
+                self.max_wait = int(v)
+            elif k == "timeout":
+                self.timeout = int(v)
+            elif k == "cache_ttl":
+                self.cache_ttl = int(v)
+            elif k == "cache_size":
+                self.cache_size = int(v)
+            elif k == "base_url":
+                self.base_url = str(v)
+            else:
+                log.warning("unknown config key: %s", k)
+
+
+CFG = Settings()
+
+
+# --------------------------------------------------------------------------- provider config
+
+PROVIDERS_PATH = _resource_path("provider.json")
+
+
+class ProviderConfig:
+    """Load and query provider configurations (API keys + base URLs) from provider.json."""
+
+    def __init__(self, path: str = PROVIDERS_PATH) -> None:
+        self.path = path
+        self.providers: dict[str, dict[str, Any]] = {}
+        self._by_env: dict[str, str] = {}  # env_var -> provider name
+        self._load()
+
+    def _load(self) -> None:
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return
+        if not isinstance(data, dict):
+            return
+        providers = data.get("providers", {})
+        if not isinstance(providers, dict):
+            return
+        for name, cfg in providers.items():
+            if not isinstance(cfg, dict):
+                continue
+            self.providers[str(name)] = {
+                "api_keys": list(cfg.get("api_keys", [])),
+                "base_url": str(cfg.get("base_url", CFG.base_url)),
+                "env_var": str(cfg.get("env_var", "")),
+            }
+            env_var = str(cfg.get("env_var", ""))
+            if env_var:
+                self._by_env[env_var] = str(name)
+
+    def get(self, provider: str) -> dict[str, Any] | None:
+        """Return provider config, or None if not listed."""
+        return self.providers.get(provider)
+
+    def base_url(self, provider: str) -> str:
+        cfg = self.get(provider)
+        return str(cfg["base_url"]) if cfg else CFG.base_url
+
+    def api_keys(self, provider: str) -> list[str]:
+        cfg = self.get(provider)
+        return list(cfg["api_keys"]) if cfg else []
+
+    def all_keys(self) -> list[tuple[str, str, str]]:
+        """Return list of (provider, base_url, api_key) for all configured keys."""
+        out: list[tuple[str, str, str]] = []
+        for provider, cfg in self.providers.items():
+            base_url = str(cfg["base_url"])
+            for key in cfg["api_keys"]:
+                if key.strip():
+                    out.append((provider, base_url, key.strip()))
+        return out
+
+    def list_providers(self) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for name, cfg in self.providers.items():
+            out.append(
+                {
+                    "name": name,
+                    "base_url": str(cfg["base_url"]),
+                    "env_var": str(cfg["env_var"]),
+                    "key_count": len(cfg["api_keys"]),
+                    "has_keys": any(k.strip() for k in cfg["api_keys"]),
+                }
+            )
+        return sorted(out, key=lambda x: str(x["name"]))
+
+
+PROVIDERS = ProviderConfig()
+
+
+# --------------------------------------------------------------------------- models catalog
+
+MODELS_PATH = _resource_path("models.json")
+
+
+class ModelsCatalog:
+    """Load and query the NVIDIA NIM models catalog (free/paid/provider metadata)."""
+
+    def __init__(self, path: str = MODELS_PATH) -> None:
+        self.path = path
+        self.models: list[dict[str, Any]] = []
+        self.providers: dict[str, str] = {}
+        self.deny: list[str] = []
+        self._by_id: dict[str, dict[str, Any]] = {}
+        self._load()
+
+    def _load(self) -> None:
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return
+        if not isinstance(data, dict):
+            return
+        self.models = (
+            data.get("models", []) if isinstance(data.get("models"), list) else []
+        )
+        self.providers = (
+            data.get("providers", {}) if isinstance(data.get("providers"), dict) else {}
+        )
+        self.deny = data.get("deny", []) if isinstance(data.get("deny"), list) else []
+        self._by_id = {
+            m["id"]: m for m in self.models if isinstance(m, dict) and "id" in m
+        }
+
+    def get(self, model_id: str) -> dict[str, Any] | None:
+        """Return catalog entry for a model id, or None if not listed."""
+        return self._by_id.get(model_id)
+
+    def is_free(self, model_id: str) -> bool:
+        entry = self.get(model_id)
+        return bool(entry and entry.get("free", False))
+
+    def provider(self, model_id: str) -> str:
+        entry = self.get(model_id)
+        if entry:
+            return str(entry.get("provider", "unknown"))
+        return "unknown"
+
+    def routes(self, model_id: str) -> list[str]:
+        entry = self.get(model_id)
+        return list(entry.get("routes", [])) if entry else []
+
+    def is_denied(self, model_id: str) -> bool:
+        low = model_id.lower()
+        return any(d in low for d in self.deny)
+
+    def list_free(self) -> list[dict[str, Any]]:
+        return [m for m in self.models if m.get("free")]
+
+    def list_paid(self) -> list[dict[str, Any]]:
+        return [m for m in self.models if not m.get("free")]
+
+    def by_provider(self, provider: str) -> list[dict[str, Any]]:
+        return [m for m in self.models if m.get("provider") == provider]
+
+    # ------------------------------------------------------------------- discovery helpers
+
+    @staticmethod
+    def _detect_provider(model_id: str) -> str:
+        """Heuristically detect the model provider from its ID."""
+        low = model_id.lower()
+        if "nemotron" in low or low.startswith("nv-") or "embed" in low:
+            return "NVIDIA"
+        if "llama" in low:
+            return "Meta"
+        if "gemma" in low:
+            return "Google"
+        if "deepseek" in low:
+            return "DeepSeek"
+        if "glm" in low:
+            return "Zhipu AI"
+        if "mistral" in low:
+            return "Mistral AI"
+        if "minimax" in low:
+            return "MiniMax"
+        if "seed" in low:
+            return "Seed"
+        return "unknown"
+
+    @staticmethod
+    def _detect_routes(model_id: str, deny: list[str] | None = None) -> list[str]:
+        """Heuristically assign router routes to a model ID."""
+        low = model_id.lower()
+        deny = deny or []
+        if any(d in low for d in deny):
+            return []  # denied models get no chat routes
+        routes: list[str] = []
+        if "embed" in low:
+            routes.append("embed")
+        if any(
+            k in low for k in ("code", "coder", "deepseek", "glm", "minimax", "seed")
+        ):
+            routes.append("code")
+        if any(
+            k in low
+            for k in (
+                "reasoning",
+                "nemotron",
+                "llama",
+                "deepseek",
+                "glm",
+                "seed",
+                "mistral-large",
+            )
+        ):
+            routes.append("reasoning")
+        if any(k in low for k in ("mini", "small", "8b", "4b", "2b", "n-e2b", "n-e4b")):
+            routes.append("fast")
+        if any(k in low for k in ("vision", "vl", "multimodal", "image")):
+            routes.append("vision")
+        if not routes:
+            routes.append("general")
+        return routes
+
+    @staticmethod
+    def _is_free(
+        model_id: str, routes: list[str], deny: list[str] | None = None
+    ) -> bool:
+        """A model is free if it resolves to at least one allowlisted route and is not denied."""
+        deny = deny or []
+        low = model_id.lower()
+        if any(d in low for d in deny):
+            return False
+        return bool(routes)
+
+    @classmethod
+    def discover_from_api(
+        cls,
+        model_ids: list[str],
+        deny: list[str] | None = None,
+        providers: dict[str, str] | None = None,
+    ) -> ModelsCatalog:
+        """Classify a list of model IDs (from the NVIDIA API) into a catalog."""
+        deny = deny or []
+        providers = providers or {}
+        models: list[dict[str, Any]] = []
+        for mid in sorted(set(model_ids)):
+            routes = cls._detect_routes(mid, deny)
+            models.append(
+                {
+                    "id": mid,
+                    "provider": providers.get(mid, cls._detect_provider(mid)),
+                    "free": cls._is_free(mid, routes, deny),
+                    "routes": routes,
+                    "description": f"Auto-discovered {mid}",
+                }
+            )
+        cat = cls.__new__(cls)
+        cat.path = MODELS_PATH
+        cat.models = models
+        cat.providers = dict(providers)
+        cat.deny = list(deny)
+        cat._by_id = {m["id"]: m for m in models}
+        return cat
+
+    def update_from_router(self, router: FreeRouter) -> int:
+        """Fetch the live model list from the NVIDIA API and merge into this catalog."""
+        try:
+            live = router.available_ids(refresh=True)
+        except RouterError:
+            return 0
+        if not live:
+            return 0
+        discovered = self.discover_from_api(
+            live, deny=self.deny, providers=self.providers
+        )
+        # Preserve descriptions for known models; set new ones
+        for m in discovered.models:
+            existing = self._by_id.get(m["id"])
+            if existing and existing.get("description"):
+                m["description"] = existing["description"]
+        self.models = discovered.models
+        self._by_id = discovered._by_id
+        return len(self.models)
+
+    def save(self, path: str | None = None) -> None:
+        """Persist the catalog to models.json."""
+        target = path or self.path
+        data: dict[str, Any] = {
+            "models": self.models,
+            "providers": self.providers,
+            "deny": self.deny,
+        }
+        tmp = target + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, target)
+
+
+CATALOG = ModelsCatalog()
+
+
+# --------------------------------------------------------------------------- router
+
+
+class FreeRouter:
+    """Thread-safe router that fans out to NVIDIA NIM endpoints with fallback, rate limiting,
+    key rotation, caching, and persistent stats."""
+
+    def __init__(
+        self,
+        api_keys: list[str] | None = None,
+        keys_file: str | None = None,
+        providers_file: str | None = None,
+        stats: bool = True,
+    ) -> None:
+        self.keys: list[Key] = (
+            [Key(k) for k in dict.fromkeys(api_keys)]
+            if api_keys
+            else load_keys(keys_file, providers_file)
+        )
+        if not self.keys:
+            raise RouterError(
+                401,
+                "No API key. Set NVIDIA_API_KEY / NVIDIA_API_KEYS or --keys-file "
+                "(free keys at build.nvidia.com).",
+            )
+        # Re-key limiters to the configured RPM after Key construction
+        for k in self.keys:
+            k.limiter = RateLimiter(CFG.rpm)
+        self._local = threading.local()
+        self.pair: dict[
+            tuple[str, str], list[float]
+        ] = {}  # (key, model) -> [benched_until, consecutive_fails]
+        self._rr = 0
+        self._lock = threading.Lock()
+        self._available: list[str] | None = None
+        self._available_at = 0.0
+        self.cache = TTLCache(CFG.cache_size, CFG.cache_ttl)
+        self.stats = Stats() if stats else None
+
+    # ----- plumbing
+
+    @property
+    def s(self) -> requests.Session:
+        if not hasattr(self._local, "s"):
+            self._local.s = requests.Session()
+        return self._local.s
+
+    def _headers(self, key: Key) -> dict[str, str]:
+        return {"Authorization": f"Bearer {key.value}", "Accept": "application/json"}
+
+    def _key_order(self) -> list[Key]:
+        with self._lock:
+            live = [k for k in self.keys if not k.dead]
+        if not live:
+            raise RouterError(
+                401, "All API keys were rejected (401/403). Check your keys."
+            )
+        with self._lock:
+            start = self._rr % len(live)
+        rotated = live[start:] + live[:start]
+        now = time.time()
+        return sorted(rotated, key=lambda k: not k.is_ready(now))
+
+    def _rec(
+        self, model: str, key: Key, outcome: str, latency: float | None = None
+    ) -> None:
+        if self.stats:
+            self.stats.rec(model, key.label, outcome, latency)
+
+    def _pair_fail(self, key: Key, model: str) -> None:
+        with self._lock:
+            p = self.pair.setdefault((key.value, model), [0.0, 0])
+            p[1] += 1
+            p[0] = time.time() + min(
+                CFG.cooldown_err * 2 ** (p[1] - 1), PAIR_BACKOFF_CAP
+            )
+
+    def _pair_ok(self, key: Key, model: str) -> None:
+        with self._lock:
+            self.pair.pop((key.value, model), None)
+
+    # ----- discovery / allowlist
+
+    def available_ids(
+        self, refresh: bool = False, ttl: int = MODEL_LIST_TTL
+    ) -> list[str]:
+        now = time.time()
+        if refresh or self._available is None or now - self._available_at > ttl:
+            last: Exception | None = None
+            for key in self._key_order():
+                try:
+                    r = self.s.get(
+                        f"{key.base_url}/models",
+                        headers=self._headers(key),
+                        timeout=30,
+                    )
+                except requests.RequestException as e:
+                    last = e
+                    continue
+                if r.status_code in (401, 403):
+                    key.mark_dead()
+                    continue
+                if r.status_code == 429:
+                    key.bench(CFG.cooldown_429)
+                    continue
+                r.raise_for_status()
+                self._available = [m["id"] for m in r.json().get("data", [])]
+                self._available_at = time.time()
+                return self._available
+            raise RouterError(502, f"Could not list models with any key ({last})")
+        return self._available or []
+
+    def allowed(self, patterns: list[str], deny: bool = True) -> list[str]:
+        out: list[str] = []
+        available = self.available_ids()
+        for p in patterns:
+            pl = p.lower()
+            for mid in available:
+                low = mid.lower()
+                if (
+                    pl in low
+                    and not (deny and any(d in low for d in CFG.deny))
+                    and mid not in out
+                ):
+                    out.append(mid)
+        return out
+
+    def all_allowed(self) -> list[str]:
+        pats = list(dict.fromkeys(p for v in CFG.routes.values() for p in v))
+        return self.allowed(pats)
+
+    def plan(
+        self, body: dict[str, Any], route: str | None = None, model: str | None = None
+    ) -> tuple[list[str], str]:
+        """-> (candidate model ids, label)"""
+        model = model or body.get("model")
+        msgs = body.get("messages", [])
+        name = (str(model or "auto")).lower()
+        if route is None:
+            if name in ("auto", "router", "free-auto", ""):
+                route = classify(msgs)
+            elif name.startswith("route:"):
+                route = name[6:]
+            elif name.startswith("free-") and name[5:] in CFG.routes:
+                route = name[5:]
+            elif name in CFG.routes:
+                route = name
+        if route:
+            if route not in CFG.routes:
+                raise RouterError(
+                    400, f"unknown route '{route}', choose from {list(CFG.routes)}"
+                )
+            cands = self.allowed(CFG.routes[route])
+            label = f"route:{route}"
+            if not cands:
+                # Fall back: no route patterns matched any available model.
+                # Return any available model (filtered by deny list) so the
+                # router can still serve requests even when live model IDs
+                # don't match hardcoded route patterns.
+                cands = [
+                    m
+                    for m in self.available_ids()
+                    if not any(d in m.lower() for d in CFG.deny)
+                ]
+        else:
+            union = list(dict.fromkeys(p for v in CFG.routes.values() for p in v))
+            cands = [m for m in self.allowed(union) if name in m.lower()]
+            label = name
+        if not cands:
+            raise RouterError(
+                404,
+                f"no allowlisted model available for '{label}'. Run `list`, edit routes.",
+            )
+        return cands, label
+
+    # ----- core dispatch
+
+    def _try(
+        self,
+        endpoint: str,
+        cands: list[str],
+        body: dict[str, Any],
+        stream: bool,
+        errors: list[str],
+    ) -> tuple[requests.Response, str, Key, float] | None:
+        for m in cands:
+            for key in self._key_order():
+                now = time.time()
+                pair = self.pair.get((key.value, m))
+                if pair and pair[0] > now:
+                    continue
+                if not key.is_ready(now):
+                    continue
+                t0 = time.time()
+                try:
+                    key.limiter.wait()
+                    resp = self.s.post(
+                        f"{key.base_url}/{endpoint}",
+                        headers=self._headers(key),
+                        json={**body, "model": m},
+                        timeout=CFG.timeout,
+                        stream=stream,
+                    )
+                except requests.RequestException as e:
+                    self._pair_fail(key, m)
+                    self._rec(m, key, "fail")
+                    errors.append(f"{m} [{key.label}]: {type(e).__name__}")
+                    continue
+                sc = resp.status_code
+                if sc == 200:
+                    self._pair_ok(key, m)
+                    key.record_ok()
+                    with self._lock:
+                        self._rr += 1
+                    return resp, m, key, t0
+                text = resp.text[:160].replace("\n", " ")
+                resp.close()
+                if sc == 429:
+                    try:
+                        ra = max(
+                            1.0,
+                            min(
+                                float(
+                                    resp.headers.get("Retry-After", CFG.cooldown_429)
+                                ),
+                                RETRY_AFTER_CAP,
+                            ),
+                        )
+                    except (ValueError, TypeError):
+                        ra = float(CFG.cooldown_429)
+                    key.record_429()
+                    key.bench(ra)
+                    self._rec(m, key, "429")
+                    errors.append(f"{m} [{key.label}]: 429 -> next key")
+                    log.info("429 on %s [%s], benched %.0fs", m, key.label, ra)
+                    continue
+                if sc in (401, 403):
+                    key.mark_dead()
+                    key.record_fail()
+                    self._rec(m, key, "fail")
+                    errors.append(f"{m} [{key.label}]: HTTP {sc} key disabled")
+                    continue
+                self._rec(m, key, "fail")
+                errors.append(f"{m} [{key.label}]: HTTP {sc} {text}")
+                if sc >= 500:
+                    self._pair_fail(key, m)
+                    continue
+                break  # 4xx: this model rejects the request -> next model, not next key
+        return None
+
+    def _open(
+        self,
+        endpoint: str,
+        cands: list[str],
+        body: dict[str, Any],
+        stream: bool = False,
+    ) -> tuple[requests.Response, str, Key, float]:
+        errors: list[str] = []
+        for attempt in (1, 2):
+            got = self._try(endpoint, cands, body, stream, errors)
+            if got:
+                return got
+            live = [k for k in self.keys if not k.dead]
+            if not live:
+                raise RouterError(
+                    401, "All API keys rejected (401/403):\n  " + "\n  ".join(errors)
+                )
+            soonest = min(k.benched_until for k in live) - time.time()
+            if attempt == 1 and 0 < soonest <= CFG.max_wait:
+                log.warning("all keys rate-limited, waiting %.0fs", soonest)
+                time.sleep(soonest + 0.5)
+                continue
+            break
+        status = 429 if any("429" in e for e in errors) else 502
+        raise RouterError(
+            status, "All routed models/keys failed:\n  " + "\n  ".join(errors)
+        )
+
+    # ----- public API
+
+    def _body(
+        self, messages: list[dict[str, Any]], kw: dict[str, Any]
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "messages": messages,
+            "max_tokens": kw.pop("max_tokens", 1024),
+        }
+        body.update(kw)
+        return body
+
+    def chat_json(
+        self,
+        body: dict[str, Any],
+        route: str | None = None,
+        model: str | None = None,
+        use_cache: bool = True,
+    ) -> dict[str, Any]:
+        """OpenAI-style request body in, dict out: {json, model, key, cached}."""
+        body = dict(body)
+        body.pop("stream", None)
+        cands, label = self.plan(body, route, model)
+        ck: str | None = None
+        if use_cache and body.get("temperature") == 0 and not body.get("tools"):
+            ck = hashlib.sha256(
+                json.dumps(
+                    [label, {k: v for k, v in body.items() if k != "model"}],
+                    sort_keys=True,
+                ).encode()
+            ).hexdigest()
+            hit = self.cache.get(ck)
+            if hit:
+                return {**hit, "cached": True}
+        resp, m, key, t0 = self._open("chat/completions", cands, body)
+        lat = time.time() - t0
+        data = resp.json()
+        self._rec(m, key, "ok", lat)
+        out: dict[str, Any] = {
+            "json": data,
+            "model": m,
+            "key": key.label,
+            "cached": False,
+        }
+        if ck:
+            self.cache.put(ck, {k: out[k] for k in ("json", "model", "key")})
+        return out
+
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        route: str | None = None,
+        model: str | None = None,
+        **kw: Any,
+    ) -> dict[str, Any]:
+        out = self.chat_json(self._body(messages, kw), route=route, model=model)
+        choices = out["json"].get("choices") or []
+        msg = choices[0].get("message", {}) if choices else {}
+        return {
+            "model": out["model"],
+            "key": out["key"],
+            "text": msg.get("content") or "",
+            "message": msg,
+            "raw": out["json"],
+            "cached": out["cached"],
+        }
+
+    def open_chat_stream(
+        self, body: dict[str, Any], route: str | None = None, model: str | None = None
+    ) -> tuple[requests.Response, str, Key]:
+        """-> (upstream streaming response, model id, key). Fails over before the first byte."""
+        body = dict(body)
+        body["stream"] = True
+        cands, _ = self.plan(body, route, model)
+        resp, m, key, t0 = self._open("chat/completions", cands, body, stream=True)
+        self._rec(m, key, "ok", time.time() - t0)
+        return resp, m, key
+
+    def chat_stream(
+        self,
+        messages: list[dict[str, Any]],
+        route: str | None = None,
+        model: str | None = None,
+        **kw: Any,
+    ) -> Iterator[str]:
+        """Generator of text deltas. Always closes the upstream response on exit."""
+        resp, _, _ = self.open_chat_stream(
+            self._body(messages, kw), route=route, model=model
+        )
+        try:
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if payload == "[DONE]":
+                    break
+                try:
+                    ch = json.loads(payload)["choices"]
+                except (ValueError, KeyError):
+                    continue
+                if ch and (d := ch[0].get("delta", {}).get("content")):
+                    yield d
+        finally:
+            resp.close()
+
+    def embeddings(self, body: dict[str, Any]) -> dict[str, Any]:
+        cands = self.allowed(CFG.embed_allow, deny=False)
+        if not cands:
+            raise RouterError(
+                404, "no allowlisted embedding model available (config: embed_allow)"
+            )
+        resp, m, key, t0 = self._open("embeddings", cands, dict(body))
+        self._rec(m, key, "ok", time.time() - t0)
+        return resp.json()
+
+    # ----- diagnostics
+
+    def probe(self) -> dict[str, tuple[Any, float]]:
+        res: dict[str, tuple[Any, float]] = {}
+        for m in self.all_allowed():
+            t0 = time.time()
+            key = next(
+                (k for k in self._key_order() if k.is_ready()), self._key_order()[0]
+            )
+            try:
+                key.limiter.wait()
+                r = self.s.post(
+                    f"{key.base_url}/chat/completions",
+                    headers=self._headers(key),
+                    timeout=60,
+                    json={
+                        "model": m,
+                        "max_tokens": 8,
+                        "messages": [{"role": "user", "content": "Reply with: ok"}],
+                    },
+                )
+                if r.status_code == 429:
+                    key.bench(CFG.cooldown_429)
+                res[m] = (r.status_code, round(time.time() - t0, 2))
+            except requests.RequestException as e:
+                res[m] = (type(e).__name__, round(time.time() - t0, 2))
+        return res
+
+    def key_status(self) -> list[tuple[str, str, str, int, int]]:
+        now, rows = time.time(), []
+        for k in self.keys:
+            st = (
+                "DEAD (401/403)"
+                if k.dead
+                else "ready"
+                if k.is_ready(now)
+                else f"limited {k.benched_until - now:.0f}s"
+            )
+            rows.append((k.label, k.provider, st, k.ok, k.hits_429))
+        return rows
+
+
+# --------------------------------------------------------------------------- proxy server
+
+
+def _read_body(handler: BaseHTTPRequestHandler) -> tuple[int, dict[str, Any]]:
+    """Read and parse the request body with a hard size cap."""
+    try:
+        n = int(handler.headers.get("Content-Length", 0))
+    except (ValueError, TypeError):
+        n = 0
+    n = max(n, 0)
+    if n > MAX_REQUEST_BYTES:
+        return 413, {
+            "error": {
+                "message": "request entity too large",
+                "type": "router_error",
+                "code": 413,
+            }
+        }
+    raw = handler.rfile.read(n) if n else b"{}"
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError:
+        return 400, {
+            "error": {"message": "invalid JSON", "type": "router_error", "code": 400}
+        }
+    if not isinstance(body, dict):
+        return 400, {
+            "error": {
+                "message": "request body must be a JSON object",
+                "type": "router_error",
+                "code": 400,
+            }
+        }
+    return 200, body
+
+
+def make_handler(router: FreeRouter, token: str | None):
+    class H(BaseHTTPRequestHandler):
+        server_version = "nvrouter/1.0"
+
+        def log_message(self, fmt: str, *a: Any) -> None:
+            log.info("%s - %s", self.address_string(), fmt % a)
+
+        def _json(
+            self, code: int, obj: Any, extra: dict[str, str] | None = None
+        ) -> None:
+            raw = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def _err(self, status: int, msg: str) -> None:
+            self._json(
+                status,
+                {"error": {"message": msg, "type": "router_error", "code": status}},
+            )
+
+        def _authed(self) -> bool:
+            if token and self.headers.get("Authorization", "") != f"Bearer {token}":
+                self._err(401, "invalid router token")
+                return False
+            return True
+
+        def do_GET(self) -> None:
+            if self.path == "/health":
+                return self._json(
+                    200,
+                    {
+                        "ok": True,
+                        "keys": [
+                            {"key": a, "provider": b, "status": c, "ok": d, "429": e}
+                            for a, b, c, d, e in router.key_status()
+                        ],
+                    },
+                )
+            if not self._authed():
+                return
+            try:
+                if self.path.rstrip("/") == "/v1/models":
+                    ids = (
+                        ["auto"]
+                        + [f"free-{r}" for r in CFG.routes]
+                        + router.all_allowed()
+                    )
+                    return self._json(
+                        200,
+                        {
+                            "object": "list",
+                            "data": [
+                                {
+                                    "id": i,
+                                    "object": "model",
+                                    "owned_by": "nvidia-free-router",
+                                }
+                                for i in ids
+                            ],
+                        },
+                    )
+                if self.path == "/stats":
+                    return self._json(
+                        200, router.stats.snapshot() if router.stats else {}
+                    )
+            except RouterError as e:
+                return self._err(e.status, e.message)
+            self._err(404, "not found")
+
+        def do_POST(self) -> None:
+            if not self._authed():
+                return
+            code, body_or_err = _read_body(self)
+            if code != 200:
+                return self._json(code, body_or_err)
+            body = body_or_err
+            try:
+                path = self.path.rstrip("/")
+                if path == "/v1/chat/completions":
+                    if body.get("stream"):
+                        resp, m, _key = router.open_chat_stream(body)
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/event-stream")
+                        self.send_header("Cache-Control", "no-cache")
+                        self.send_header("X-Router-Model", m)
+                        self.end_headers()
+                        try:
+                            for line in resp.iter_lines():
+                                if line:
+                                    self.wfile.write(line + b"\n\n")
+                                    self.wfile.flush()
+                        except (BrokenPipeError, ConnectionResetError):
+                            pass
+                        finally:
+                            resp.close()
+                        return
+                    out = router.chat_json(body)
+                    return self._json(
+                        200,
+                        out["json"],
+                        {
+                            "X-Router-Model": out["model"],
+                            "X-Router-Key": out["key"],
+                            "X-Router-Cache": str(out["cached"]).lower(),
+                        },
+                    )
+                if path == "/v1/embeddings":
+                    return self._json(200, router.embeddings(body))
+                self._err(404, "not found")
+            except RouterError as e:
+                self._err(e.status, e.message)
+            except Exception as e:
+                log.exception("unhandled")
+                self._err(500, str(e))
+
+    return H
+
+
+def serve(router: FreeRouter, host: str, port: int, token: str | None) -> None:
+    srv = ThreadingHTTPServer((host, port), make_handler(router, token))
+    srv.daemon_threads = True
+    log.warning(
+        "serving on http://%s:%d/v1  (auth %s, %d key(s))",
+        host,
+        port,
+        "ON" if token else "off",
+        len(router.keys),
+    )
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if router.stats:
+            router.stats.flush()
+
+
+# --------------------------------------------------------------------------- CLI
+
+HELP_TOPICS: dict[str, str] = {
+    "quickstart": """\
+QUICKSTART
+  1. Get free key(s) at https://build.nvidia.com  (keys start with nvapi-)
+  2. export NVIDIA_API_KEYS="nvapi-aaa,nvapi-bbb"
+  3. python nvidia.py list              # which allowlisted models exist
+  4. python nvidia.py chat "hello"      # auto-routed chat
+  5. python nvidia.py serve             # OpenAI-compatible proxy on :8000
+""",
+    "keys": """\
+API KEYS
+  Sources (merged, de-duplicated):
+    NVIDIA_API_KEY      one key
+    NVIDIA_API_KEYS     comma / space / newline separated
+    --keys-file FILE    one key per line, '#' comments allowed
+  On HTTP 429 the key is benched (Retry-After honoured) and the SAME model is
+  retried on the next key. 401/403 marks a key dead. Keys are always masked in
+  output. Use only keys that belong to you or your team.
+  Check state with:  python nvidia.py keys
+""",
+    "routes": """\
+ROUTES  (free-only allowlist; first available match wins, then falls back down the list)
+  auto       classify the prompt automatically (default for `chat` and the proxy)
+  general    everyday questions
+  code       code / debugging / regex / SQL / git
+  reasoning  maths, logic, step-by-step analysis, very long prompts
+  fast       short prompts, smallest models
+  vision     messages containing images
+  Model names accepted by `chat --model` and the proxy:
+    auto | free-<route> | route:<route> | any substring of an allowlisted model id (e.g. glm-4.7)
+  Anything not on the allowlist is refused (HTTP 404), so paid models are never called.
+  Edit routes with a config file (see: help config). See what resolves: `list`.
+""",
+    "serve": """\
+PROXY SERVER
+  python nvidia.py serve [--host 127.0.0.1] [--port 8000] [--token SECRET]
+  Endpoints:
+    POST /v1/chat/completions   (stream and non-stream, tools, images)
+    POST /v1/embeddings
+    GET  /v1/models   GET /health   GET /stats
+  Client example:
+    from openai import OpenAI
+    c = OpenAI(base_url="http://127.0.0.1:8000/v1", api_key="SECRET")
+    c.chat.completions.create(model="auto", messages=[{"role": "user", "content": "hi"}])
+  Response headers: X-Router-Model, X-Router-Key (masked), X-Router-Cache.
+  Binds to localhost by default. If you use --host 0.0.0.0, ALWAYS set --token / ROUTER_TOKEN.
+""",
+    "config": """\
+CONFIG FILE  (--config router.json  or  NVIDIA_ROUTER_CONFIG=router.json)
+  {
+    "routes": {"code": ["glm-4.7", "deepseek-v3.2"]},   // replaces only the routes you list
+    "deny": ["embed", "guard", "safety"],                // never route chat to ids containing these
+    "embed_allow": ["nv-embed"],
+    "rpm": 30,            // per-key requests/minute (free tier is about 40)
+    "max_wait": 30,       // seconds to wait if every key is rate limited
+    "cache_ttl": 600,     // seconds; 0 disables (cache only applies when temperature == 0)
+    "timeout": 90,
+    "base_url": "https://integrate.api.nvidia.com/v1"
+  }
+  (Remove the // comments in the real file; JSON does not allow them.)
+""",
+    "env": """\
+ENVIRONMENT VARIABLES
+  NVIDIA_API_KEY / NVIDIA_API_KEYS   API key(s)
+  NVIDIA_BASE_URL                    default https://integrate.api.nvidia.com/v1
+  NVIDIA_RPM                         per-key requests per minute (default 35)
+  NVIDIA_MAX_WAIT                    max seconds to wait when all keys are limited (default 60)
+  NVIDIA_CACHE_TTL                   cache seconds (default 3600, 0 = off)
+  NVIDIA_ROUTER_CONFIG               path to router.json
+  NVIDIA_ROUTER_HOME                 stats dir (default ~/.nvidia_free_router)
+  ROUTER_TOKEN                       bearer token required by the proxy
+""",
+    "troubleshooting": """\
+TROUBLESHOOTING
+  "No API key"                      set NVIDIA_API_KEY(S) or --keys-file
+  "no allowlisted model available"  run `list`; edit routes so the substrings match real ids
+  429 / "all keys rate-limited"     add more keys, lower NVIDIA_RPM, or raise NVIDIA_MAX_WAIT
+  401/403                           key invalid/expired; check `keys` (shows DEAD)
+  404 on a model                    it is not on the allowlist (by design: free-only)
+  Unsure what is happening          add -v for logs, or run `probe` to test each model
+""",
+}
+
+MAIN_EPILOG = """\
+examples:
+  %(prog)s chat "write a regex for emails"        auto-routed
+  %(prog)s chat "hi" --route fast --stream        pick a route, stream output
+  %(prog)s serve --port 8000 --token secret       OpenAI-compatible proxy
+  %(prog)s keys | list | probe | stats            diagnostics
+
+more help:  %(prog)s help [quickstart|keys|routes|serve|config|env|troubleshooting]
+"""
+
+
+def print_help_topic(parser: argparse.ArgumentParser, topic: str | None) -> None:
+    if topic in (None, "all"):
+        parser.print_help()
+        print()
+        for t in HELP_TOPICS.values():
+            print(t)
+    elif topic in HELP_TOPICS:
+        print(HELP_TOPICS[topic])
+    else:
+        sys.exit(
+            f"unknown help topic '{topic}'. Topics: all, " + ", ".join(HELP_TOPICS)
+        )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    fmt = argparse.RawDescriptionHelpFormatter
+    ap = argparse.ArgumentParser(
+        prog="nvidia.py",
+        formatter_class=fmt,
+        epilog=MAIN_EPILOG,
+        description="Free-only router for NVIDIA hosted NIM endpoints: model fallback, multi-key "
+        "rotation on 429, auto routing, streaming, cache, stats and an OpenAI-compatible proxy.",
+    )
+    ap.add_argument(
+        "--keys-file", metavar="FILE", help="file with one API key per line"
+    )
+    ap.add_argument(
+        "--providers-file",
+        metavar="FILE",
+        default=os.environ.get("NVIDIA_PROVIDERS_FILE"),
+        help="provider.json with per-provider API keys and base URLs (or NVIDIA_PROVIDERS_FILE)",
+    )
+    ap.add_argument(
+        "--config",
+        metavar="FILE",
+        default=os.environ.get("NVIDIA_ROUTER_CONFIG"),
+        help="JSON config overriding routes/limits (or NVIDIA_ROUTER_CONFIG)",
+    )
+    ap.add_argument(
+        "-v", "--verbose", action="store_true", help="show routing/rate-limit logs"
+    )
+    sub = ap.add_subparsers(dest="cmd", metavar="COMMAND")
+
+    def add(name: str, help_: str, **kw: Any) -> argparse.ArgumentParser:
+        return sub.add_parser(
+            name, help=help_, description=help_, formatter_class=fmt, **kw
+        )
+
+    add(
+        "keys",
+        "show each API key (masked): ready / limited / dead, success and 429 counts",
+    )
+    add("list", "list allowlisted models that currently exist, grouped by route")
+    m = add(
+        "models",
+        "list catalog models with free/paid/provider metadata (no API key needed)",
+    )
+    m.add_argument(
+        "--provider",
+        metavar="PROVIDER",
+        help="filter by provider (e.g. NVIDIA, Google)",
+    )
+    m.add_argument("--free", action="store_true", help="show only free models")
+    m.add_argument("--paid", action="store_true", help="show only paid models")
+    d = add(
+        "discover",
+        "auto-discover models from the NVIDIA API and update models.json",
+    )
+    d.add_argument("--keys-file", metavar="FILE", help="file with one API key per line")
+    d.add_argument(
+        "--output",
+        metavar="FILE",
+        default="models.json",
+        help="output catalog path (default: models.json)",
+    )
+    p = add(
+        "providers",
+        "list configured providers with API key counts and base URLs (no API key needed)",
+    )
+    p.add_argument(
+        "--file",
+        metavar="FILE",
+        default=None,
+        help="provider.json path (default: provider.json or NVIDIA_PROVIDERS_FILE)",
+    )
+    add(
+        "probe",
+        "send a tiny request to every allowlisted model and report status + latency",
+    )
+    add("stats", "show saved per-model and per-key statistics (no API key needed)")
+    c = add(
+        "chat",
+        "send one prompt through the router",
+        epilog='example:  %(prog)s "explain TCP slow start" --route reasoning --stream',
+    )
+    c.add_argument("prompt", help="the user message")
+    c.add_argument(
+        "--route",
+        help="force a route (default: auto-classify). Any route name defined in "
+        "routes (default or config); validated at request time.",
+    )
+    c.add_argument(
+        "--model",
+        help="specific allowlisted model, any substring of its id (e.g. glm-4.7)",
+    )
+    c.add_argument("--system", help="optional system prompt")
+    c.add_argument(
+        "--max-tokens", type=int, default=1024, metavar="N", help="default 1024"
+    )
+    c.add_argument("--stream", action="store_true", help="print tokens as they arrive")
+    s = add(
+        "serve",
+        "run a local OpenAI-compatible proxy (chat, embeddings, models, health, stats)",
+        epilog="client base_url: http://HOST:PORT/v1   model: auto | free-code | glm-4.7 ...",
+    )
+    s.add_argument(
+        "--host", default="127.0.0.1", help="default 127.0.0.1 (localhost only)"
+    )
+    s.add_argument("--port", type=int, default=8000, help="default 8000")
+    s.add_argument(
+        "--token",
+        default=os.environ.get("ROUTER_TOKEN"),
+        help="require 'Authorization: Bearer TOKEN' (or ROUTER_TOKEN); "
+        "strongly advised if host is not 127.0.0.1",
+    )
+    h = add(
+        "help",
+        "detailed help: quickstart, keys, routes, serve, config, env, troubleshooting",
+    )
+    h.add_argument(
+        "topic", nargs="?", default="all", help="all (default) or one topic name"
+    )
+    return ap
+
+
+def main() -> None:
+    ap = build_parser()
+    a = ap.parse_args()
+    if a.cmd is None:
+        ap.print_help()
+        print("\nNew here? run:  python nvidia.py help quickstart")
+        return
+    if a.cmd == "help":
+        return print_help_topic(ap, a.topic)
+
+    logging.basicConfig(
+        level=logging.INFO if a.verbose or a.cmd == "serve" else logging.WARNING,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+    if a.config:
+        CFG.load(a.config)
+
+    if a.cmd == "stats":
+        data = Stats().data
+        print(f"{'model':<48}{'ok':>6}{'fail':>6}{'429':>6}{'avg s':>8}")
+        for m, v in sorted(data["models"].items()):
+            avg = v["lat_sum"] / v["ok"] if v["ok"] else 0
+            print(f"{m:<48}{v['ok']:>6}{v['fail']:>6}{v['429']:>6}{avg:>8.2f}")
+        print(f"\n{'key':<24}{'ok':>6}{'fail':>6}{'429':>6}")
+        for k, v in data["keys"].items():
+            print(f"{k:<24}{v['ok']:>6}{v['fail']:>6}{v['429']:>6}")
+        return
+
+    if a.cmd == "models":
+        models = CATALOG.models
+        if a.provider:
+            models = CATALOG.by_provider(a.provider)
+        if a.free:
+            models = CATALOG.list_free()
+        if a.paid:
+            models = CATALOG.list_paid()
+        if not models:
+            print("No models match the given filters.")
+            return
+        print(f"{'model':<40}{'provider':<16}{'tier':<8}{'routes':<24}{'description'}")
+        print("-" * 110)
+        for m in sorted(models, key=lambda x: str(x.get("id", ""))):
+            mid = str(m.get("id", ""))
+            prov = str(m.get("provider", "unknown"))
+            tier = "free" if m.get("free") else "paid"
+            routes = ",".join(m.get("routes", []))
+            desc = str(m.get("description", ""))
+            print(f"{mid:<40}{prov:<16}{tier:<8}{routes:<24}{desc}")
+        return
+
+    if a.cmd == "providers":
+        print(f"{'provider':<16}{'base_url':<45}{'keys':>6}{'env_var':<20}")
+        print("-" * 90)
+        for p in PROVIDERS.list_providers():
+            name = str(p["name"])
+            base = str(p["base_url"])
+            nkeys = str(p["key_count"])
+            env = str(p["env_var"])
+            print(f"{name:<16}{base:<45}{nkeys:>6}{env:<20}")
+        return
+
+    try:
+        r = FreeRouter(keys_file=a.keys_file, providers_file=a.providers_file)
+    except RouterError as e:
+        sys.exit(f"error {e.status}: {e.message}")
+    try:
+        if a.cmd == "keys":
+            for label, prov, st, ok, n429 in r.key_status():
+                print(f"{label:<22} {prov:<16} {st:<16} ok={ok} 429s={n429}")
+        elif a.cmd == "list":
+            for route, pats in CFG.routes.items():
+                print(f"[{route}]")
+                for m in r.allowed(pats):
+                    print("  ", m)
+        elif a.cmd == "probe":
+            for m, (status, secs) in r.probe().items():
+                print(f"{status!s:>6}  {secs:>6}s  {m}")
+        elif a.cmd == "chat":
+            msgs = ([{"role": "system", "content": a.system}] if a.system else []) + [
+                {"role": "user", "content": a.prompt}
+            ]
+            if a.stream:
+                for d in r.chat_stream(
+                    msgs, route=a.route, model=a.model, max_tokens=a.max_tokens
+                ):
+                    print(d, end="", flush=True)
+                print()
+            else:
+                out = r.chat(
+                    msgs, route=a.route, model=a.model, max_tokens=a.max_tokens
+                )
+                print(f"# model: {out['model']}  key: {out['key']}\n{out['text']}")
+        elif a.cmd == "serve":
+            serve(r, a.host, a.port, a.token)
+        elif a.cmd == "discover":
+            count = CATALOG.update_from_router(r)
+            CATALOG.save(a.output)
+            free = len(CATALOG.list_free())
+            paid = len(CATALOG.list_paid())
+            print(f"Discovered {count} model(s) from NVIDIA API -> {a.output}")
+            print(f"  free: {free}  paid: {paid}")
+            providers = sorted({m.get("provider", "unknown") for m in CATALOG.models})
+            print(f"  providers: {', '.join(providers)}")
+    except RouterError as e:
+        sys.exit(f"error {e.status}: {e.message}")
+    finally:
+        if r.stats:
+            r.stats.flush()
+
+
+if __name__ == "__main__":
+    main()

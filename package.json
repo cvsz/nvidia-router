@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "rpmbuild": "^0.0.23",
+    "update": "^0.4.2"
+  }
+}

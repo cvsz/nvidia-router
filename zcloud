@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# zcloud — NVIDIA Free-Model Router CLI entry point
+#
+# Usage:
+#   ./zcloud chat "write a regex for emails"
+#   ./zcloud serve --port 8000 --token secret
+#   ./zcloud models --free
+#   ./zcloud providers
+#   ./zcloud discover
+#
+# Auto-detects the virtual environment and delegates to nvidia.py.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${SCRIPT_DIR}"
+
+# Resolve venv python (prefer local .venv, fall back to system python3)
+if [[ -x "${ROOT_DIR}/.venv/bin/python" ]]; then
+  PYTHON="${ROOT_DIR}/.venv/bin/python"
+elif [[ -x "${ROOT_DIR}/venv/bin/python" ]]; then
+  PYTHON="${ROOT_DIR}/venv/bin/python"
+else
+  PYTHON="$(command -v python3 || command -v python)"
+fi
+
+export PYTHONPATH="${ROOT_DIR}:${PYTHONPATH:-}"
+
+exec "${PYTHON}" "${ROOT_DIR}/nvidia.py" "$@"

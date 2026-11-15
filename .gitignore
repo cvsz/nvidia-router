@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Virtual environment
+.venv/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.coverage.*
+.cache
+
+# Linting
+.ruff_cache/
+.mypy_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sensitive - API keys and secrets (DO NOT COMMIT)
+provider.json
+keys.txt
+*.env
+.env
+.env.local
+.secrets
+secret.json
+
+# Stats and temp files
+.nvidia_free_router/
+test_proxy_stats/
+test_*_tmp.json
+test_*_dirty.json
+test_*_corrupt.json
+*.tmp
+
+# Logs
+*.log
+
+# Build output
+dist/

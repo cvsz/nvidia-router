@@ -1,0 +1,67 @@
+# Dockerfile — NVIDIA Free-Model Router
+# Multi-stage build for production deployment
+
+# Stage 1: Build dependencies
+FROM python:3.14-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create and activate virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Python dependencies
+COPY requirements.txt ./
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Stage 2: Runtime
+FROM python:3.14-slim AS runtime
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -s /bin/false appuser
+
+# Copy application files
+COPY --chown=appuser:appuser nvidia.py models.json provider.json zcloud zcloud-gui.py ./
+
+# Create data directory
+RUN mkdir -p /app/data /app/logs && chown appuser:appuser /app/data /app/logs
+
+USER appuser
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+ENV NVIDIA_RPM=35
+ENV NVIDIA_CACHE_TTL=3600
+ENV NVIDIA_TIMEOUT=90
+ENV NVIDIA_MAX_WAIT=60
+
+# Expose port for the OpenAI-compatible proxy
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default command: run the OpenAI-compatible proxy
+ENTRYPOINT ["python", "nvidia.py"]
+CMD ["serve", "--host", "0.0.0.0", "--port", "8000"]
