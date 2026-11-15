@@ -102,7 +102,6 @@ class ChatScreen(Screen):
 
     def on_mount(self) -> None:
         self._update_model_select()
-        self.query_one("#chat-output", Static).expand = True
 
     def _update_model_select(self) -> None:
         models = [m.get("id", "") for m in CATALOG.models]

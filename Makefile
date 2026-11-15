@@ -145,8 +145,8 @@ serve: ## Run the OpenAI-compatible proxy on :8000 (set keys + token first)
 
 lint: ## Run ruff check and ruff format --check
 	@echo "==> Linting with ruff"
-	$(VENV_PYTHON) -m ruff check nvidia.py test_nvidia.py zcloud-gui.py
-	$(VENV_PYTHON) -m ruff format --check nvidia.py test_nvidia.py zcloud-gui.py
+	$(VENV_PYTHON) -m ruff check nvidia.py test_nvidia.py zcloud-gui.py zcloud-tui.py
+	$(VENV_PYTHON) -m ruff format --check nvidia.py test_nvidia.py zcloud-gui.py zcloud-tui.py
 
 format: ## Format code with ruff
 	@echo "==> Formatting with ruff"

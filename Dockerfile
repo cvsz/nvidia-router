@@ -2,7 +2,7 @@
 # Multi-stage build for production deployment
 
 # Stage 1: Build dependencies
-FROM python:3.14-slim AS builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
@@ -22,13 +22,14 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Runtime
-FROM python:3.14-slim AS runtime
+FROM python:3.13-slim AS runtime
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Install runtime dependencies (ca-certificates for HTTPS, curl for healthcheck)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
@@ -38,8 +39,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser -s /bin/false appuser
 
-# Copy application files
-COPY --chown=appuser:appuser nvidia.py models.json provider.json zcloud zcloud-gui.py ./
+# Copy application files (NOT provider.json — keys must come from env)
+COPY --chown=appuser:appuser nvidia.py models.json zcloud zcloud-gui.py ./
 
 # Create data directory
 RUN mkdir -p /app/data /app/logs && chown appuser:appuser /app/data /app/logs
@@ -63,5 +64,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Default command: run the OpenAI-compatible proxy
+# WARNING: Binding to 0.0.0.0 exposes the proxy on all interfaces.
+# Always set ROUTER_TOKEN when running on 0.0.0.0.
 ENTRYPOINT ["python", "nvidia.py"]
 CMD ["serve", "--host", "0.0.0.0", "--port", "8000"]
