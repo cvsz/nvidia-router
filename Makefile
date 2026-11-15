@@ -190,13 +190,13 @@ build\:exe: setup lint test ## Build native CLI executable using PyInstaller
 		--clean \
 		--onefile \
 		--icon nvidia.ico \
-		--name nvidia-router \
+		--name zrouter \
 		--distpath $(DIST)/exe \
 		--workpath $(BUILD)/pyinstaller \
 		--specpath $(BUILD)/pyinstaller \
 		nvidia.py
 	cp nvidia.ico nvidia.png make_icon.py models.json provider.json $(DIST)/exe/
-	@echo "==> Native executable ready: $(DIST)/exe/nvidia-router"
+	@echo "==> Native executable ready: $(DIST)/exe/zrouter"
 	@echo "==> Data files: $(DIST)/exe/models.json, $(DIST)/exe/provider.json, $(DIST)/exe/nvidia.ico, $(DIST)/exe/nvidia.png"
 
 build\:exe\:win: setup lint test ## Build Windows .exe (requires Wine for cross-compilation)
@@ -208,13 +208,13 @@ build\:exe\:win: setup lint test ## Build Windows .exe (requires Wine for cross-
 			--clean \
 			--onefile \
 			--icon nvidia.ico \
-			--name nvidia-router \
+			--name zrouter \
 			--distpath $(DIST)/exe/win \
 			--workpath $(BUILD)/pyinstaller-win \
 			--specpath $(BUILD)/pyinstaller-win \
 			nvidia.py; \
 		cp nvidia.ico nvidia.png make_icon.py models.json provider.json $(DIST)/exe/win/; \
-		echo "==> Windows .exe ready: $(DIST)/exe/win/nvidia-router.exe"; \
+		echo "==> Windows .exe ready: $(DIST)/exe/win/zrouter.exe"; \
 	else \
 		echo "==> Wine not found. Install wine to cross-compile Windows .exe."; \
 		echo "==>   sudo apt install wine"; \
@@ -289,13 +289,13 @@ build\:prod: setup lint test ## Production-optimized build (PyInstaller onefile)
 		--clean \
 		--onefile \
 		--icon nvidia.ico \
-		--name nvidia-router \
+		--name zrouter \
 		--distpath $(DIST)/prod \
 		--workpath $(BUILD)/pyinstaller-prod \
 		--specpath $(BUILD)/pyinstaller-prod \
 		nvidia.py
 	cp nvidia.ico nvidia.png make_icon.py models.json provider.json $(DIST)/prod/
-	@echo "==> Production executable ready: $(DIST)/prod/nvidia-router"
+	@echo "==> Production executable ready: $(DIST)/prod/zrouter"
 
 build\:ent: setup lint test ## Enterprise build with all features
 	@echo "==> Building enterprise variant"
@@ -383,9 +383,9 @@ gui: ## Launch zcloud GUI
 
 docker\:build: ## Build Docker image
 	@echo "==> Building Docker image"
-	docker build -t nvidia-router:latest .
-	docker tag nvidia-router:latest nvidia-router:$$(date +%Y%m%d)
-	@echo "==> Docker image ready: nvidia-router:latest"
+	docker build -t zrouter:latest .
+	docker tag zrouter:latest zrouter:$$(date +%Y%m%d)
+	@echo "==> Docker image ready: zrouter:latest"
 
 docker\:run: docker\:build ## Run Docker container (requires NVIDIA_API_KEYS)
 	@echo "==> Running Docker container"
@@ -394,7 +394,7 @@ docker\:run: docker\:build ## Run Docker container (requires NVIDIA_API_KEYS)
 		echo "  export NVIDIA_API_KEYS=\"nvapi-aaa,nvapi-bbb\""; \
 	fi
 	docker run --rm -d \
-		--name nvidia-router \
+		--name zrouter \
 		-p 8000:8000 \
 		-e NVIDIA_API_KEYS="$$NVIDIA_API_KEYS" \
 		-e NVIDIA_BASE_URL="$$NVIDIA_BASE_URL" \
@@ -402,7 +402,7 @@ docker\:run: docker\:build ## Run Docker container (requires NVIDIA_API_KEYS)
 		-e NVIDIA_CACHE_TTL="$$NVIDIA_CACHE_TTL" \
 		-e NVIDIA_TIMEOUT="$$NVIDIA_TIMEOUT" \
 		-e NVIDIA_MAX_WAIT="$$NVIDIA_MAX_WAIT" \
-		nvidia-router:latest \
+		zrouter:latest \
 		serve --host 0.0.0.0 --port 8000
 	@echo "==> Container running at http://localhost:8000/v1"
 	@echo "==> Test: curl http://localhost:8000/health"

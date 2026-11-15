@@ -10,8 +10,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/nvidia-router.git
-cd nvidia-router
+git clone https://github.com/your-org/zrouter.git
+cd zrouter
 
 # Create virtual environment
 python -m venv .venv
@@ -46,19 +46,19 @@ export OPENAI_API_KEY=secret
 ### Build Image
 
 ```bash
-docker build -t nvidia-router:latest .
+docker build -t zrouter:latest .
 ```
 
 ### Run Container
 
 ```bash
 docker run -d \
-  --name nvidia-router \
+  --name zrouter \
   -p 8000:8000 \
   -e NVIDIA_API_KEYS="nvapi-xxx,nvapi-yyy" \
   -e NVIDIA_RPM=35 \
   -e NVIDIA_CACHE_TTL=3600 \
-  nvidia-router:latest
+  zrouter:latest
 ```
 
 ### Using Make
@@ -70,7 +70,7 @@ make docker:run
 
 ## systemd Service (Linux)
 
-Create `/etc/systemd/system/nvidia-router.service`:
+Create `/etc/systemd/system/zrouter.service`:
 
 ```ini
 [Unit]
@@ -79,12 +79,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=nvidia-router
-WorkingDirectory=/opt/nvidia-router
+User=zrouter
+WorkingDirectory=/opt/zrouter
 Environment=NVIDIA_API_KEYS=nvapi-xxx,nvapi-yyy
 Environment=NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 Environment=NVIDIA_RPM=35
-ExecStart=/opt/nvidia-router/.venv/bin/python nvidia.py serve --host 0.0.0.0 --port 8000
+ExecStart=/opt/zrouter/.venv/bin/python nvidia.py serve --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
 
@@ -94,8 +94,8 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable nvidia-router
-sudo systemctl start nvidia-router
+sudo systemctl enable zrouter
+sudo systemctl start zrouter
 ```
 
 ## Docker Compose
@@ -106,7 +106,7 @@ Create `docker-compose.yml`:
 version: "3.8"
 
 services:
-  nvidia-router:
+  zrouter:
     build: .
     ports:
       - "8000:8000"

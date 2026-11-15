@@ -23,14 +23,14 @@ Enterprise-grade OpenAI-compatible proxy/router for NVIDIA's hosted NIM endpoint
 ### From PyPI
 
 ```bash
-pip install nvidia-router
+pip install zrouter
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/your-org/nvidia-router.git
-cd nvidia-router
+git clone https://github.com/your-org/zrouter.git
+cd zrouter
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -39,8 +39,8 @@ pip install -e .
 ### Docker
 
 ```bash
-docker build -t nvidia-router .
-docker run -p 8000:8000 -e NVIDIA_API_KEYS="nvapi-xxx,nvapi-yyy" nvidia-router
+docker build -t zrouter .
+docker run -p 8000:8000 -e NVIDIA_API_KEYS="nvapi-xxx,nvapi-yyy" zrouter
 ```
 
 ## Usage
@@ -80,10 +80,10 @@ python zcloud-tui.py
 
 ```bash
 docker run -d \
-  --name nvidia-router \
+  --name zrouter \
   -p 8000:8000 \
   -e NVIDIA_API_KEYS="nvapi-xxx,nvapi-yyy" \
-  nvidia-router:latest
+  zrouter:latest
 ```
 
 Then point your OpenAI client at `http://localhost:8000/v1`.

@@ -41,8 +41,8 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nvidia-router
-          path: dist/exe/nvidia-router
+          name: zrouter
+          path: dist/exe/zrouter
           retention-days: 7
 
   release:
@@ -75,8 +75,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: dist/exe/nvidia-router
-          asset_name: nvidia-router-linux-x64
+          asset_path: dist/exe/zrouter
+          asset_name: zrouter-linux-x64
           asset_content_type: application/octet-stream
 
       - name: Upload GUI artifact
