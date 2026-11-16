@@ -2118,7 +2118,14 @@ class CartManager:
         with self._lock:
             cart = self._carts.get(cart_id)
             if cart is None:
-                return None
+                # Try prefix match
+                matches = [
+                    c for c_id, c in self._carts.items() if c_id.startswith(cart_id)
+                ]
+                if len(matches) == 1:
+                    cart = matches[0]
+                else:
+                    return None
             cart.status = "checked_out"
             cart.checked_out_at = time.time()
             self._save()
@@ -2217,7 +2224,13 @@ class NetworkManager:
         with self._lock:
             peer = self._peers.get(peer_id)
             if peer is None:
-                return None
+                matches = [
+                    p for p_id, p in self._peers.items() if p_id.startswith(peer_id)
+                ]
+                if len(matches) == 1:
+                    peer = matches[0]
+                else:
+                    return None
             peer.status = status
             if status == "online":
                 peer.last_seen = time.time()

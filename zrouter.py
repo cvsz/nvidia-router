@@ -1651,12 +1651,8 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         help="fourth subcommand argument",
     )
-    b.add_argument(
-        "arg3",
-        nargs="?",
-        help="third subcommand argument",
-    )
     b.add_argument("--value", help="value for memory set or vault update")
+    b.add_argument("--value2", help="second value for cart items (quantity)")
     b.add_argument("--details", help="details for approval card creation")
     b.add_argument(
         "--schedule", help="schedule for routine (e.g. daily 09:00, every 1 hour)"
@@ -2148,7 +2144,7 @@ def _bot_cmd(a: Any) -> None:
                 else:
                     cart = cm.create(bot.id)
                 cart = cm.add_item(cart.id, a.arg2, price, quantity, a.arg3 or "")
-                print(f"  Added item to cart: {a.arg3}")
+                print(f"  Added item to cart: {a.arg2}")
         elif a.arg == "checkout" and a.arg2:
             cart = cm.checkout(a.arg2)
             if cart:
@@ -2168,11 +2164,11 @@ def _bot_cmd(a: Any) -> None:
                 print("  No peers.")
             for p in peers:
                 print(f"  {p.id[:8]}  {p.name:<20} {p.ip:<20} {p.status}")
-        elif a.arg == "add" and a.arg2 and a.value:
-            peer = nm.add_peer(a.arg2, a.value)
+        elif a.arg == "add" and a.arg2 and a.arg3:
+            peer = nm.add_peer(a.arg2, a.arg3)
             print(f"  Added peer: {peer.name} ({peer.ip})")
         elif a.arg == "status" and a.arg2:
-            peer = nm.update_status(a.arg2, a.value or "online")
+            peer = nm.update_status(a.arg2, a.arg3 or "online")
             if peer:
                 print(f"  Peer status: {peer.status}")
             else:
