@@ -109,27 +109,37 @@ zrouter ไม่ต้องการฐานข้อมูลภายนอ
 
 ### 🏗️ Architecture
 
-```text
-                     +----------------------+
-                     |      Interfaces      |
-                     | CLI / GUI / TUI / Web |
-                     +----------+-----------+
-                                |
-                                v
-                     +----------------------+
-                     |      Router          |
-                     | FreeRouter (multi-key |
-                     | rotation, rate limit, |
-                     | backoff, cache, stats) |
-                     +----------+-----------+
-                                |
-                                v
-                     +----------------------+
-                     |   NVIDIA NIM API     |
-                     |   (integrate.api.    |
-                     |    nvidia.com/v1)    |
-                     +----------------------+
+<p align="center">
+  <img src="static/img/nvidia.png" alt="NVIDIA" width="64" height="64" />
+</p>
+
+```mermaid
+graph TD
+    A[Interfaces] -->|CLI / GUI / TUI / Web| B[Router]
+    B -->|Multi-key rotation<br/>Rate limiting<br/>Exponential backoff| C[Cache]
+    B --> D[Stats]
+    C -->|temperature == 0| E[Response Cache]
+    B -->|Allowlist check| F[NVIDIA NIM API]
+    F -->|integrate.api.nvidia.com/v1| G[(NVIDIA Cloud)]
+    
+    style A fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    style B fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style C fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style D fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style F fill:#ffebee,stroke:#b71c1c,stroke-width:2px
+    style G fill:#eceff1,stroke:#37474f,stroke-width:2px
 ```
+
+**Bridge Infrastructure** — zrouter routes traffic between local interfaces and the NVIDIA NIM API:
+
+| Layer | Component | Responsibility |
+|-------|-----------|----------------|
+| **Interface Layer** | CLI / GUI / TUI / Web Dashboard | User-facing entry points |
+| **Router Layer** | `FreeRouter` | Multi-key rotation, rate limiting, backoff, cache, stats |
+| **Cache Layer** | `TTLCache` | Response caching (temperature == 0, no tools, non-stream) |
+| **Stats Layer** | `Stats` | Persistent per-model / per-key statistics |
+| **Transport Layer** | `requests` + `urllib3` | HTTP(S) to NVIDIA NIM API |
+| **Upstream Layer** | NVIDIA NIM API | Free model inference endpoints |
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) สำหรับรายละเอียดเต็ม (ถ้ามี)
 
