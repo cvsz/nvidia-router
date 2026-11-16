@@ -2022,7 +2022,7 @@ class ShoppingCart:
     id: str
     owner_bot_id: str
     items: list[CartItem]
-    status: str  # "active", "checked_out", "abandoned"
+    status: str = "active"  # "active", "checked_out", "abandoned"
     created_at: float = field(default_factory=time.time)
     checked_out_at: float | None = None
 
@@ -2274,6 +2274,7 @@ __all__ = [
     "RoutineScheduler",
     "RoutineStatus",
     "SharedConnector",
+    "ShoppingCart",
     "SkillLibrary",
     "SkillTemplate",
     "Vault",
