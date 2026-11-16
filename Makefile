@@ -269,7 +269,7 @@ build\:web: setup lint test ## Build full web deployment package (Flask + Gunico
 	@echo "==> Compiling Python sources"
 	$(VENV_PYTHON) -m py_compile zrouter.py zrouter-gui.py web_app.py
 	@echo "==> Copying application files"
-	cp zrouter.py models.json provider.json nvidia.ico nvidia.png make_icon.py $(DIST)/web/
+	cp zrouter.py zrouter_bot.py models.json provider.json nvidia.ico nvidia.png make_icon.py $(DIST)/web/
 	cp web_app.py gunicorn.conf.py Procfile Dockerfile.web docker-compose.web.yml runtime.txt .env.web.example README.web.md .dockerignore.web $(DIST)/web/
 	mv $(DIST)/web/.dockerignore.web $(DIST)/web/.dockerignore
 	@echo "==> Copying templates and static assets"
@@ -286,7 +286,7 @@ build\:web\:dev: setup lint test ## Build web dev package (hot-reload, debug)
 	@rm -rf $(DIST)/web
 	@mkdir -p $(DIST)/web/templates $(DIST)/web/static/img
 	$(VENV_PYTHON) -m py_compile zrouter.py web_app.py
-	cp zrouter.py models.json provider.json nvidia.ico nvidia.png make_icon.py $(DIST)/web/
+	cp zrouter.py zrouter_bot.py models.json provider.json nvidia.ico nvidia.png make_icon.py $(DIST)/web/
 	cp web_app.py gunicorn.conf.py Procfile Dockerfile.web docker-compose.web.yml runtime.txt .env.web.example README.web.md .dockerignore.web $(DIST)/web/
 	mv $(DIST)/web/.dockerignore.web $(DIST)/web/.dockerignore
 	cp -r templates/* $(DIST)/web/templates/
@@ -300,7 +300,7 @@ build\:web\:prod: setup lint test ## Build web production package (gunicorn, opt
 	@rm -rf $(DIST)/web
 	@mkdir -p $(DIST)/web/templates $(DIST)/web/static/img
 	$(VENV_PYTHON) -m py_compile zrouter.py web_app.py
-	cp zrouter.py models.json provider.json nvidia.ico nvidia.png make_icon.py $(DIST)/web/
+	cp zrouter.py zrouter_bot.py models.json provider.json nvidia.ico nvidia.png make_icon.py $(DIST)/web/
 	cp web_app.py gunicorn.conf.py Procfile Dockerfile.web docker-compose.web.yml runtime.txt .env.web.example README.web.md .dockerignore.web $(DIST)/web/
 	mv $(DIST)/web/.dockerignore.web $(DIST)/web/.dockerignore
 	cp -r templates/* $(DIST)/web/templates/
@@ -314,7 +314,7 @@ build\:web\:ent: setup lint test ## Build web enterprise package (all features +
 	@rm -rf $(DIST)/web
 	@mkdir -p $(DIST)/web/templates $(DIST)/web/static/img
 	$(VENV_PYTHON) -m py_compile zrouter.py web_app.py
-	cp zrouter.py models.json provider.json nvidia.ico nvidia.png make_icon.py $(DIST)/web/
+	cp zrouter.py zrouter_bot.py models.json provider.json nvidia.ico nvidia.png make_icon.py $(DIST)/web/
 	cp web_app.py gunicorn.conf.py Procfile Dockerfile.web docker-compose.web.yml runtime.txt .env.web.example README.web.md .dockerignore.web $(DIST)/web/
 	mv $(DIST)/web/.dockerignore.web $(DIST)/web/.dockerignore
 	cp -r templates/* $(DIST)/web/templates/

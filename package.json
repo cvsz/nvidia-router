@@ -1,6 +1,41 @@
 {
-  "dependencies": {
-    "rpmbuild": "^0.0.23",
-    "update": "^0.4.2"
+  "name": "zrouter-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "NVIDIA Free-Model Router - Grok Bot class AI Bot desktop + mobile app",
+  "author": "cvsz",
+  "license": "MIT",
+  "workspaces": [
+    "apps/desktop",
+    "apps/mobile",
+    "services/api",
+    "services/router",
+    "services/gateway",
+    "packages/core",
+    "packages/ui",
+    "packages/i18n",
+    "packages/connectors",
+    "packages/protocol"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "changelog:add": "node scripts/changelog-add.js",
+    "changelog:lint": "node scripts/changelog-lint.js",
+    "changelog:feed": "node scripts/changelog-feed.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "turbo": "^2.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.3.0",
+    "vitest": "^2.0.0",
+    "@vitest/coverage-v8": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

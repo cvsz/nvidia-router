@@ -156,7 +156,14 @@ DEFAULT_ROUTES: dict[str, list[str]] = {
         "nvidia/meta/llama-3.2-11b-vision-instruct",
     ],
     "fast": ["gemma-3n-e4b", "gemma-3n-e2b", "mistral-small-3.1", "gemma-3-27b"],
-    "vision": ["gemma-3-27b", "gemma-3n-e4b", "mistral-small-3.1", "nvidia/nemotron-3.5-super-vl-120b-a12b", "nvidia/meta/llama-3.2-90b-vision-instruct", "nvidia/meta/llama-3.2-11b-vision-instruct"],
+    "vision": [
+        "gemma-3-27b",
+        "gemma-3n-e4b",
+        "mistral-small-3.1",
+        "nvidia/nemotron-3.5-super-vl-120b-a12b",
+        "nvidia/meta/llama-3.2-90b-vision-instruct",
+        "nvidia/meta/llama-3.2-11b-vision-instruct",
+    ],
 }
 DEFAULT_DENY: list[str] = [
     "embed",

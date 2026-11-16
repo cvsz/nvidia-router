@@ -1,31 +1,23 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-.venv/
-env/
-ENV/
-env.bak/
-venv.bak/
+# local docs
+docs/vertify-validated.md
 
-# Virtual environment
-.venv/
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-.coverage.*
-.cache
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
 
-# Linting
-.ruff_cache/
-.mypy_cache/
+# Environment files
+.env
+.env.web
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # IDE
 .idea/
@@ -38,26 +30,31 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Sensitive - API keys and secrets (DO NOT COMMIT)
-provider.json
-keys.txt
-*.env
-.env
-.env.local
-.secrets
-secret.json
-
-# Stats and temp files
-.nvidia_free_router/
-test_proxy_stats/
-test_*_tmp.json
-test_*_dirty.json
-test_*_corrupt.json
-*.tmp
-
 # Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Build output
-dist/
-build/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Docker
+.docker/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Turbo
+.turbo/
