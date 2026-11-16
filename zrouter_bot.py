@@ -326,6 +326,7 @@ class ApprovalEngine:
 # --------------------------------------------------------------------------- #
 # Bot — main conversational agent
 # --------------------------------------------------------------------------- #
+@dataclass
 class VoiceSettings:
     """Voice settings for a bot (x.ai voice menu: speed slider, voice selection)."""
 
