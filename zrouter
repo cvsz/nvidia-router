@@ -25,4 +25,4 @@ fi
 
 export PYTHONPATH="${ROOT_DIR}:${PYTHONPATH:-}"
 
-exec "${PYTHON}" "${ROOT_DIR}/nvidia.py" "$@"
+exec "${PYTHON}" "${ROOT_DIR}/zrouter.py" "$@"

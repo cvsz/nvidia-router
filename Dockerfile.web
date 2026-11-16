@@ -3,9 +3,10 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# System dependencies (ca-certificates for HTTPS)
+# System dependencies (ca-certificates for HTTPS, curl for healthcheck)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Python dependencies
@@ -17,6 +18,7 @@ RUN pip install --upgrade pip && \
 COPY zrouter.py web_app.py models.json provider.json ./
 COPY templates ./templates
 COPY static ./static
+COPY gunicorn.conf.py ./
 
 # Non-root user
 RUN groupadd -r appuser && useradd -r -g appuser -s /bin/false appuser

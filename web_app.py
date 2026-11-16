@@ -9,6 +9,7 @@ production-ready under gunicorn / uWSGI.
 Endpoints:
     GET  /                      browser chat UI
     GET  /health                health + key status
+    GET  /list                  allowlisted models grouped by route
     GET  /v1/models             OpenAI model list (allowlisted + auto routes)
     GET  /stats                 per-model / per-key statistics
     POST /v1/chat/completions   OpenAI-compatible chat (stream + non-stream)
@@ -57,6 +58,9 @@ app = Flask(
     static_folder=os.path.join(_HERE, "static"),
 )
 
+# Max request body: 16 MiB (matches zrouter.py _read_body cap)
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+
 # --------------------------------------------------------------------------- #
 # Router instance (lazy – keys come from env at first request)
 # --------------------------------------------------------------------------- #
@@ -70,6 +74,27 @@ def _get_router() -> FreeRouter:
         providers_file = os.environ.get("NVIDIA_PROVIDERS_FILE")
         _router = FreeRouter(keys_file=keys_file, providers_file=providers_file)
     return _router
+
+
+# --------------------------------------------------------------------------- #
+# Auth
+# --------------------------------------------------------------------------- #
+_token: str | None = os.environ.get("ROUTER_TOKEN")
+
+
+def _authed() -> bool:
+    """Return True if request carries valid Bearer token (or no token required)."""
+    if not _token:
+        return True
+    auth = request.headers.get("Authorization", "")
+    return auth == f"Bearer {_token}"
+
+
+def _require_auth() -> Any:
+    """Return 401 JSON response if not authenticated; None if OK."""
+    if _token and not _authed():
+        return jsonify({"error": {"message": "invalid router token", "code": 401}}), 401
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -102,6 +127,9 @@ def health() -> Any:
 @app.get("/list")
 def list_models() -> Any:
     """List allowlisted models grouped by route (from models.json catalog)."""
+    err = _require_auth()
+    if err is not None:
+        return err
     try:
         from zrouter import CATALOG
 
@@ -130,6 +158,9 @@ def list_models() -> Any:
 @app.get("/v1/models")
 def models() -> Any:
     """OpenAI-compatible model list (allowlisted models + route aliases)."""
+    err = _require_auth()
+    if err is not None:
+        return err
     try:
         r = _get_router()
         ids = ["auto"] + [f"free-{rt}" for rt in CFG.routes] + r.all_allowed()
@@ -153,6 +184,9 @@ def models() -> Any:
 @app.get("/stats")
 def stats() -> Any:
     """Per-model / per-key statistics snapshot."""
+    err = _require_auth()
+    if err is not None:
+        return err
     try:
         r = _get_router()
         return jsonify(r.stats.snapshot() if r.stats else {})
@@ -163,6 +197,9 @@ def stats() -> Any:
 @app.post("/v1/chat/completions")
 def chat_completions() -> Any:
     """OpenAI-compatible chat/completions endpoint."""
+    err = _require_auth()
+    if err is not None:
+        return err
     try:
         r = _get_router()
         body = request.get_json(force=True, silent=True) or {}
@@ -205,6 +242,9 @@ def chat_completions() -> Any:
 @app.post("/v1/embeddings")
 def embeddings() -> Any:
     """OpenAI-compatible embeddings endpoint."""
+    err = _require_auth()
+    if err is not None:
+        return err
     try:
         r = _get_router()
         body = request.get_json(force=True, silent=True) or {}
