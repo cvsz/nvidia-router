@@ -42,11 +42,11 @@ web = [
 ]
 
 [project.scripts]
-zrouter = "nvidia:main"
-zcloud = "nvidia:main"
+zrouter = "zrouter:main"
+zcloud = "zrouter:main"
 
 [tool.setuptools]
-py-modules = ["nvidia"]
+py-modules = ["zrouter"]
 
 [tool.setuptools.package-data]
-nvidia = ["*.json", "*.ico", "*.png"]
+zrouter = ["*.json", "*.ico", "*.png"]
