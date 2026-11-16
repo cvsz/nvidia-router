@@ -447,6 +447,22 @@ build\:zrouter: setup lint test ## Build zrouter CLI entry point
 	cp make_icon.py $(DIST)/bin/make_icon.py
 	@echo "==> zrouter ready: $(DIST)/bin/zrouter"
 
+build\:zbot: setup lint test ## Build zbot CLI executable using PyInstaller (cross-platform)
+	@echo "==> Building zbot CLI executable"
+	@mkdir -p $(DIST)/dev
+	$(VENV_PYTHON) -m PyInstaller \
+		--noconfirm \
+		--clean \
+		--onefile \
+		--icon nvidia.ico \
+		--name zbot \
+		--distpath $(DIST)/dev \
+		--workpath $(BUILD)/pyinstaller-zbot \
+		--specpath $(BUILD)/pyinstaller-zbot \
+		zrouter.py
+	cp nvidia.ico nvidia.png make_icon.py models.json provider.json $(DIST)/dev/
+	@echo "==> Zbot executable ready: $(DIST)/dev/zbot"
+
 build\:packages: setup lint test ## Build all Python packages (wheel + sdist)
 	@echo "==> Building Python packages"
 	@mkdir -p $(DIST)/packages
