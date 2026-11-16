@@ -60,3 +60,4 @@ test_*_corrupt.json
 
 # Build output
 dist/
+build/

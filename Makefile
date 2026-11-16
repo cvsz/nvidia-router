@@ -26,7 +26,8 @@
 #   make install:zrouter # install zrouter to $(PREFIX)/bin
 #   make uninstall:zrouter # remove zrouter from $(PREFIX)/bin
 
-.PHONY: all setup test run serve lint format clean help venv install-deps build build\:all build\:web build\:desktops build\:dev build\:prod build\:ent build\:exe build\:exe\:win build\:gui build\:tui build\:android build\:ios build\:zrouter build\:packages build\:wheel build\:sdist install\:zrouter uninstall\:zrouter zrouter gui docker\:build docker\:run
+.PHONY: all setup test run serve lint format clean help venv install-deps build build\:all build\:web build\:web\:all build\:web\:dev build\:web\:prod build\:web\:ent build\:desktops build\:dev build\:prod build\:ent build\:exe build\:exe\:win build\:gui build\:tui build\:android build\:ios build\:zrouter build\:packages build\:wheel build\:sdist install\:zrouter uninstall\:zrouter zrouter gui docker\:build docker\:run build\:web\:start build\:deploy
+.PHONY: all setup test run serve lint format clean help venv install-deps build build\:all build\:web build\:web\:all build\:web\:dev build\:web\:prod build\:web\:ent build\:desktops build\:dev build\:prod build\:ent build\:exe build\:exe\:win build\:gui build\:tui build\:android build\:ios build\:zrouter build\:packages build\:wheel build\:sdist install\:zrouter uninstall\:zrouter zrouter gui docker\:build docker\:run build\:web\:start build\:deploy
 
 PYTHON ?= python3
 VENV := .venv
@@ -75,6 +76,12 @@ help: ## Show this help
 	@echo "  make build:gui    build GUI executable using PyInstaller"
 	@echo "  make build:tui    build TUI package"
 	@echo "  make build:web    build web deployment package"
+	@echo "  make build:web:all build all web variants (dev + prod + ent)"
+	@echo "  make build:web:dev build web dev package (hot-reload, debug)"
+	@echo "  make build:web:prod build web production package (gunicorn, optimized)"
+	@echo "  make build:web:ent build web enterprise package (all features)"
+	@echo "  make build:web:start  start the web server from dist/web/"
+	@echo "  make build:deploy     full deploy: build web package + start server"
 	@echo "  make build:desktops build desktop application packages (.desktop files)"
 	@echo "  make build:dev    development build with dev tools"
 	@echo "  make build:prod   production-optimized build (PyInstaller onefile)"
@@ -255,14 +262,93 @@ build\:tui: setup lint test ## Build TUI package with textual
 	@echo "==> TUI package ready in $(DIST)/tui/"
 	@echo "==> Run: $(DIST)/tui/zrouter providers"
 
-build\:web: setup lint test ## Build web deployment package
+build\:web: setup lint test ## Build full web deployment package (Flask + Gunicorn + UI)
 	@echo "==> Building web deployment package"
-	@mkdir -p $(DIST)/web
-	$(VENV_PYTHON) -m py_compile zrouter.py test_zrouter.py zrouter-gui.py
-	cp nvidia.ico nvidia.png make_icon.py zrouter.py zrouter-gui.py models.json provider.json $(DIST)/web/
-	printf 'requests==2.34.2\npytest==9.2.0\nruff==0.17.5\n' > $(DIST)/web/requirements.txt
+	@rm -rf $(DIST)/web
+	@mkdir -p $(DIST)/web/templates $(DIST)/web/static/img
+	@echo "==> Compiling Python sources"
+	$(VENV_PYTHON) -m py_compile zrouter.py zrouter-gui.py web_app.py
+	@echo "==> Copying application files"
+	cp zrouter.py models.json provider.json nvidia.ico nvidia.png make_icon.py $(DIST)/web/
+	cp web_app.py gunicorn.conf.py Procfile Dockerfile.web docker-compose.web.yml runtime.txt .env.web.example README.web.md .dockerignore.web $(DIST)/web/
+	mv $(DIST)/web/.dockerignore.web $(DIST)/web/.dockerignore
+	@echo "==> Copying templates and static assets"
+	cp -r templates/* $(DIST)/web/templates/
+	cp -r static/* $(DIST)/web/static/
+	@echo "==> Writing requirements.txt"
+	printf 'flask==3.1.0\ngunicorn==23.0.0\nrequests==2.34.2\n' > $(DIST)/web/requirements.txt
 	@echo "==> Web package ready in $(DIST)/web/"
-	@echo "==> Run: cd $(DIST)/web && python zrouter.py serve --port 8000"
+	@echo "==> Run: cd $(DIST)/web && pip install -r requirements.txt && NVIDIA_API_KEYS=\"...\" python web_app.py"
+	@echo "==> Or with gunicorn: gunicorn -c gunicorn.conf.py web_app:app"
+
+build\:web\:dev: setup lint test ## Build web dev package (hot-reload, debug)
+	@echo "==> Building web dev package"
+	@rm -rf $(DIST)/web
+	@mkdir -p $(DIST)/web/templates $(DIST)/web/static/img
+	$(VENV_PYTHON) -m py_compile zrouter.py web_app.py
+	cp zrouter.py models.json provider.json nvidia.ico nvidia.png make_icon.py $(DIST)/web/
+	cp web_app.py gunicorn.conf.py Procfile Dockerfile.web docker-compose.web.yml runtime.txt .env.web.example README.web.md .dockerignore.web $(DIST)/web/
+	mv $(DIST)/web/.dockerignore.web $(DIST)/web/.dockerignore
+	cp -r templates/* $(DIST)/web/templates/
+	cp -r static/* $(DIST)/web/static/
+	printf 'flask==3.1.0\ngunicorn==23.0.0\nrequests==2.34.2\n' > $(DIST)/web/requirements.txt
+	@echo "==> Web dev package ready in $(DIST)/web/"
+	@echo "==> Run: cd $(DIST)/web && pip install -r requirements.txt && NVIDIA_API_KEYS=\"...\" WEB_DEBUG=1 python web_app.py"
+
+build\:web\:prod: setup lint test ## Build web production package (gunicorn, optimized)
+	@echo "==> Building web production package"
+	@rm -rf $(DIST)/web
+	@mkdir -p $(DIST)/web/templates $(DIST)/web/static/img
+	$(VENV_PYTHON) -m py_compile zrouter.py web_app.py
+	cp zrouter.py models.json provider.json nvidia.ico nvidia.png make_icon.py $(DIST)/web/
+	cp web_app.py gunicorn.conf.py Procfile Dockerfile.web docker-compose.web.yml runtime.txt .env.web.example README.web.md .dockerignore.web $(DIST)/web/
+	mv $(DIST)/web/.dockerignore.web $(DIST)/web/.dockerignore
+	cp -r templates/* $(DIST)/web/templates/
+	cp -r static/* $(DIST)/web/static/
+	printf 'flask==3.1.0\ngunicorn==23.0.0\nrequests==2.34.2\n' > $(DIST)/web/requirements.txt
+	@echo "==> Web production package ready in $(DIST)/web/"
+	@echo "==> Run: cd $(DIST)/web && pip install -r requirements.txt && gunicorn -c gunicorn.conf.py web_app:app"
+
+build\:web\:ent: setup lint test ## Build web enterprise package (all features + monitoring)
+	@echo "==> Building web enterprise package"
+	@rm -rf $(DIST)/web
+	@mkdir -p $(DIST)/web/templates $(DIST)/web/static/img
+	$(VENV_PYTHON) -m py_compile zrouter.py web_app.py
+	cp zrouter.py models.json provider.json nvidia.ico nvidia.png make_icon.py $(DIST)/web/
+	cp web_app.py gunicorn.conf.py Procfile Dockerfile.web docker-compose.web.yml runtime.txt .env.web.example README.web.md .dockerignore.web $(DIST)/web/
+	mv $(DIST)/web/.dockerignore.web $(DIST)/web/.dockerignore
+	cp -r templates/* $(DIST)/web/templates/
+	cp -r static/* $(DIST)/web/static/
+	printf 'flask==3.1.0\ngunicorn==23.0.0\nrequests==2.34.2\n' > $(DIST)/web/requirements.txt
+	@echo "==> Web enterprise package ready in $(DIST)/web/"
+	@echo "==> Run: cd $(DIST)/web && pip install -r requirements.txt && gunicorn -c gunicorn.conf.py web_app:app"
+
+build\:web\:all: build\:web\:dev build\:web\:prod build\:web\:ent ## Build all web variants (dev + prod + ent)
+	@echo "==> All web variants built"
+
+build\:web\:start: ## Start the web server from dist/web/ (requires NVIDIA_API_KEYS)
+	@echo "==> Starting zrouter web server"
+	@if [ ! -d "$(DIST)/web" ]; then \
+		echo "==> dist/web not found. Building web package first..."; \
+		$(MAKE) build\:web; \
+	fi
+	@PIDFILE="$(CURDIR)/$(DIST)/web/gunicorn.pid"; \
+	if [ -f "$$PIDFILE" ] && kill -0 "$$(cat "$$PIDFILE")" 2>/dev/null; then \
+		echo "==> Stopping existing zrouter-web (PID $$(cat "$$PIDFILE"))"; \
+		kill "$$(cat "$$PIDFILE")" 2>/dev/null || true; \
+		sleep 1; \
+	fi; \
+	cd $(DIST)/web && "$(CURDIR)/$(VENV_PIP)" install -q -r requirements.txt && \
+		if [ "$$WEB_DEBUG" = "1" ]; then \
+			NVIDIA_API_KEYS="$$NVIDIA_API_KEYS" WEB_HOST="$$WEB_HOST" WEB_PORT="$$WEB_PORT" WEB_DEBUG=1 "$(CURDIR)/$(VENV_PYTHON)" web_app.py; \
+		else \
+			NVIDIA_API_KEYS="$$NVIDIA_API_KEYS" "$(CURDIR)/$(VENV_PYTHON)" -m gunicorn -c gunicorn.conf.py --pid "$$PIDFILE" web_app:app; \
+		fi
+
+build\:deploy: setup lint test ## Full deploy: build web package + start server (requires NVIDIA_API_KEYS)
+	@echo "==> Deploying zrouter web"
+	$(MAKE) build\:web
+	$(MAKE) build\:web:start
 
 build\:desktops: setup lint test ## Build desktop application packages (.desktop files)
 	@echo "==> Building desktop application packages"

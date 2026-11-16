@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  zrouter-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "8000:8000"
+    environment:
+      - NVIDIA_API_KEYS=${NVIDIA_API_KEYS}
+      - NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+      - NVIDIA_RPM=35
+      - NVIDIA_CACHE_TTL=3600
+      - NVIDIA_TIMEOUT=90
+      - NVIDIA_MAX_WAIT=60
+      - WEB_HOST=0.0.0.0
+      - WEB_PORT=8000
+      - ROUTER_TOKEN=${ROUTER_TOKEN}
+    restart: unless-stopped
