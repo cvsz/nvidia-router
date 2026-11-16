@@ -17,7 +17,6 @@ Endpoints:
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import sys
@@ -25,13 +24,12 @@ from typing import Any
 
 from flask import (
     Flask,
+    Response,
     jsonify,
-    make_response,
     render_template,
     request,
     send_from_directory,
     stream_with_context,
-    Response,
 )
 
 # --------------------------------------------------------------------------- #
@@ -42,8 +40,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 # Import the core router (functions/classes defined in zrouter.py)
-import zrouter  # noqa: E402  (zrouter.py lives in same dir)
-from zrouter import FreeRouter, CFG, RouterError, make_handler, serve  # noqa: E402
+from zrouter import CFG, FreeRouter, RouterError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -107,6 +104,7 @@ def list_models() -> Any:
     """List allowlisted models grouped by route (from models.json catalog)."""
     try:
         from zrouter import CATALOG
+
         grouped: dict[str, list[str]] = {route: [] for route in CFG.routes}
         for m in CATALOG.models:
             if not isinstance(m, dict):
@@ -187,11 +185,15 @@ def chat_completions() -> Any:
             )
 
         out = r.chat_json(body)
-        return jsonify(out["json"]), 200, {
-            "X-Router-Model": out["model"],
-            "X-Router-Key": out["key"],
-            "X-Router-Cache": str(out["cached"]).lower(),
-        }
+        return (
+            jsonify(out["json"]),
+            200,
+            {
+                "X-Router-Model": out["model"],
+                "X-Router-Key": out["key"],
+                "X-Router-Cache": str(out["cached"]).lower(),
+            },
+        )
 
     except RouterError as e:
         return jsonify({"error": {"message": e.message, "code": e.status}}), e.status
