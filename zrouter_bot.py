@@ -326,6 +326,292 @@ class ApprovalEngine:
 # --------------------------------------------------------------------------- #
 # Bot — main conversational agent
 # --------------------------------------------------------------------------- #
+class VoiceSettings:
+    """Voice settings for a bot (x.ai voice menu: speed slider, voice selection)."""
+
+    voice_id: str = "default"
+    speed: float = 1.0  # 0.5x to 2.0x
+    language: str = "en"
+
+    def __post_init__(self) -> None:
+        self.speed = max(0.5, min(2.0, self.speed))
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> VoiceSettings:
+        return cls(
+            voice_id=d.get("voice_id", "default"),
+            speed=d.get("speed", 1.0),
+            language=d.get("language", "en"),
+        )
+
+
+class VoiceManager:
+    """Manages voice settings for bots (speed slider, voice cards)."""
+
+    def __init__(self, path: Path = BOT_HOME / "voice.json") -> None:
+        self.path = path
+        self._voices: dict[str, VoiceSettings] = {}
+        self._lock = threading.Lock()
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            self._voices = {}
+            return
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._voices = {k: VoiceSettings.from_dict(v) for k, v in data.items()}
+        except (OSError, ValueError, KeyError):
+            log.exception("Failed to load voice settings; starting empty")
+            self._voices = {}
+
+    def _save(self) -> None:
+        tmp = self.path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump({k: v.to_dict() for k, v in self._voices.items()}, f, indent=2)
+        os.replace(tmp, self.path)
+
+    def get(self, bot_id: str) -> VoiceSettings:
+        with self._lock:
+            return self._voices.get(bot_id, VoiceSettings())
+
+    def set(self, bot_id: str, settings: VoiceSettings) -> VoiceSettings:
+        with self._lock:
+            self._voices[bot_id] = settings
+            self._save()
+            return settings
+
+    def set_speed(self, bot_id: str, speed: float) -> VoiceSettings:
+        settings = self.get(bot_id)
+        settings.speed = max(0.5, min(2.0, speed))
+        return self.set(bot_id, settings)
+
+    def set_voice(self, bot_id: str, voice_id: str) -> VoiceSettings:
+        settings = self.get(bot_id)
+        settings.voice_id = voice_id
+        return self.set(bot_id, settings)
+
+    def set_language(self, bot_id: str, language: str) -> VoiceSettings:
+        settings = self.get(bot_id)
+        settings.language = language
+        return self.set(bot_id, settings)
+
+
+# --------------------------------------------------------------------------- #
+# Shared Connectors (x.ai: share app login as shared connector)
+# --------------------------------------------------------------------------- #
+@dataclass
+class SharedConnector:
+    """A connector shared between bots (x.ai: shared connector, Allow Shared Logins)."""
+
+    id: str
+    connector_name: str
+    owner_bot_id: str
+    shared_with: list[str]  # bot_ids that can use this connector
+    created_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> SharedConnector:
+        return cls(
+            id=d["id"],
+            connector_name=d["connector_name"],
+            owner_bot_id=d["owner_bot_id"],
+            shared_with=d.get("shared_with", []),
+            created_at=d.get("created_at", time.time()),
+        )
+
+
+class ConnectorShareManager:
+    """Manages shared connectors between bots."""
+
+    def __init__(self, path: Path = BOT_HOME / "shared_connectors.json") -> None:
+        self.path = path
+        self._connectors: dict[str, SharedConnector] = {}
+        self._lock = threading.Lock()
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            self._connectors = {}
+            return
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._connectors = {c["id"]: SharedConnector.from_dict(c) for c in data}
+        except (OSError, ValueError, KeyError):
+            log.exception("Failed to load shared connectors; starting empty")
+            self._connectors = {}
+
+    def _save(self) -> None:
+        tmp = self.path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump([c.to_dict() for c in self._connectors.values()], f, indent=2)
+        os.replace(tmp, self.path)
+
+    def share(
+        self,
+        connector_name: str,
+        owner_bot_id: str,
+        shared_with: list[str] | None = None,
+    ) -> SharedConnector:
+        connector = SharedConnector(
+            id=str(uuid.uuid4()),
+            connector_name=connector_name,
+            owner_bot_id=owner_bot_id,
+            shared_with=shared_with or [],
+        )
+        with self._lock:
+            self._connectors[connector.id] = connector
+            self._save()
+        return connector
+
+    def get(self, connector_id: str) -> SharedConnector | None:
+        with self._lock:
+            return self._connectors.get(connector_id)
+
+    def list_for_bot(self, bot_id: str) -> list[SharedConnector]:
+        with self._lock:
+            return [
+                c
+                for c in self._connectors.values()
+                if c.owner_bot_id == bot_id or bot_id in c.shared_with
+            ]
+
+    def share_with(self, connector_id: str, bot_id: str) -> SharedConnector | None:
+        with self._lock:
+            connector = self._connectors.get(connector_id)
+            if connector is None:
+                return None
+            if bot_id not in connector.shared_with:
+                connector.shared_with.append(bot_id)
+                self._save()
+            return connector
+
+    def list_all(self) -> list[SharedConnector]:
+        with self._lock:
+            return list(self._connectors.values())
+
+
+# --------------------------------------------------------------------------- #
+# Review Learnings Queue (x.ai: what teammates teach waits under Review)
+# --------------------------------------------------------------------------- #
+@dataclass
+class ReviewLearning:
+    """A learning item that a teammate taught, waiting for owner/Manager approval."""
+
+    id: str
+    teacher_bot_id: str
+    lesson: str  # what was taught
+    context: str  # where/how it was taught
+    status: str  # "pending", "approved", "rejected"
+    created_at: float = field(default_factory=time.time)
+    reviewed_at: float | None = None
+    reviewed_by: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> ReviewLearning:
+        return cls(
+            id=d["id"],
+            teacher_bot_id=d["teacher_bot_id"],
+            lesson=d["lesson"],
+            context=d.get("context", ""),
+            status=d.get("status", "pending"),
+            created_at=d.get("created_at", time.time()),
+            reviewed_at=d.get("reviewed_at"),
+            reviewed_by=d.get("reviewed_by"),
+        )
+
+
+class ReviewQueue:
+    """Manages review learnings: what teammates teach waits for owner approval."""
+
+    def __init__(self, path: Path = BOT_HOME / "review_queue.json") -> None:
+        self.path = path
+        self._reviews: dict[str, ReviewLearning] = {}
+        self._lock = threading.Lock()
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            self._reviews = {}
+            return
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._reviews = {r["id"]: ReviewLearning.from_dict(r) for r in data}
+        except (OSError, ValueError, KeyError):
+            log.exception("Failed to load review queue; starting empty")
+            self._reviews = {}
+
+    def _save(self) -> None:
+        tmp = self.path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump([r.to_dict() for r in self._reviews.values()], f, indent=2)
+        os.replace(tmp, self.path)
+
+    def add(
+        self,
+        teacher_bot_id: str,
+        lesson: str,
+        context: str = "",
+    ) -> ReviewLearning:
+        review = ReviewLearning(
+            id=str(uuid.uuid4()),
+            teacher_bot_id=teacher_bot_id,
+            lesson=lesson,
+            context=context,
+            status="pending",
+        )
+        with self._lock:
+            self._reviews[review.id] = review
+            self._save()
+        return review
+
+    def get(self, review_id: str) -> ReviewLearning | None:
+        with self._lock:
+            return self._reviews.get(review_id)
+
+    def approve(self, review_id: str, reviewed_by: str) -> ReviewLearning | None:
+        with self._lock:
+            review = self._reviews.get(review_id)
+            if review is None or review.status != "pending":
+                return None
+            review.status = "approved"
+            review.reviewed_at = time.time()
+            review.reviewed_by = reviewed_by
+            self._save()
+            return review
+
+    def reject(self, review_id: str, reviewed_by: str) -> ReviewLearning | None:
+        with self._lock:
+            review = self._reviews.get(review_id)
+            if review is None or review.status != "pending":
+                return None
+            review.status = "rejected"
+            review.reviewed_at = time.time()
+            review.reviewed_by = reviewed_by
+            self._save()
+            return review
+
+    def list_pending(self) -> list[ReviewLearning]:
+        with self._lock:
+            return [r for r in self._reviews.values() if r.status == "pending"]
+
+    def list_all(self) -> list[ReviewLearning]:
+        with self._lock:
+            return list(self._reviews.values())
+
+
 class Bot:
     """Conversational bot with memory, vault, approvals, and status reporting."""
 
@@ -341,6 +627,9 @@ class Bot:
         self.vault = Vault(BOT_HOME / f"vault_{self.id}.json")
         self.memory = Memory(BOT_HOME / f"memory_{self.id}.json")
         self.approval = ApprovalEngine(auto_approve)
+        self.voice = VoiceManager(BOT_HOME / f"voice_{self.id}.json")
+        self.connectors = ConnectorShareManager(BOT_HOME / f"connectors_{self.id}.json")
+        self.reviews = ReviewQueue(BOT_HOME / f"reviews_{self.id}.json")
         self._status_lock = threading.Lock()
         self._conversations: dict[str, list[dict[str, str]]] = {}
         log.info("Bot initialized: %s (id=%s)", self.name, self.id)
@@ -403,6 +692,57 @@ class Bot:
 
     def expire_stale_approvals(self) -> int:
         return self.approval.expire_stale()
+
+    # -- voice controls (x.ai: voice menu speed slider, voice cards) -------
+    def voice_get(self) -> VoiceSettings:
+        return self.voice.get(self.id)
+
+    def voice_set_speed(self, speed: float) -> VoiceSettings:
+        return self.voice.set_speed(self.id, speed)
+
+    def voice_set_voice(self, voice_id: str) -> VoiceSettings:
+        return self.voice.set_voice(self.id, voice_id)
+
+    def voice_set_language(self, language: str) -> VoiceSettings:
+        return self.voice.set_language(self.id, language)
+
+    # -- shared connectors (x.ai: Allow Shared Logins) ---------------------
+    def connector_share(
+        self, connector_name: str, shared_with: list[str] | None = None
+    ) -> SharedConnector:
+        return self.connectors.share(connector_name, self.id, shared_with)
+
+    def connector_get(self, connector_id: str) -> SharedConnector | None:
+        return self.connectors.get(connector_id)
+
+    def connector_list_for_bot(self) -> list[SharedConnector]:
+        return self.connectors.list_for_bot(self.id)
+
+    def connector_share_with(
+        self, connector_id: str, bot_id: str
+    ) -> SharedConnector | None:
+        return self.connectors.share_with(connector_id, bot_id)
+
+    # -- review learnings (x.ai: what teammates teach waits under Review) --
+    def review_add(
+        self, teacher_bot_id: str, lesson: str, context: str = ""
+    ) -> ReviewLearning:
+        return self.reviews.add(teacher_bot_id, lesson, context)
+
+    def review_get(self, review_id: str) -> ReviewLearning | None:
+        return self.reviews.get(review_id)
+
+    def review_approve(self, review_id: str, reviewed_by: str) -> ReviewLearning | None:
+        return self.reviews.approve(review_id, reviewed_by)
+
+    def review_reject(self, review_id: str, reviewed_by: str) -> ReviewLearning | None:
+        return self.reviews.reject(review_id, reviewed_by)
+
+    def review_list_pending(self) -> list[ReviewLearning]:
+        return self.reviews.list_pending()
+
+    def review_list_all(self) -> list[ReviewLearning]:
+        return self.reviews.list_all()
 
     # -- conversations ------------------------------------------------------
     def add_message(self, conversation_id: str, role: str, content: str) -> None:
@@ -1014,6 +1354,11 @@ class MeetingManager:
 
 
 # --------------------------------------------------------------------------- #
+# Voice Controls (x.ai: voice menu speed slider 0.5x-2x, voice cards)
+# --------------------------------------------------------------------------- #
+
+
+# --------------------------------------------------------------------------- #
 # Memory Import (x.ai: import memory from another AI assistant)
 # --------------------------------------------------------------------------- #
 class MemoryImporter:
@@ -1081,6 +1426,813 @@ class BotHealth:
 
 
 # --------------------------------------------------------------------------- #
+# Pages (x.ai: collaborative documents - reports, memos, dashboards)
+# --------------------------------------------------------------------------- #
+@dataclass
+class Page:
+    """A collaborative document/page (x.ai: Pages - reports, memos, dashboards)."""
+
+    id: str
+    title: str
+    content: str
+    owner_bot_id: str
+    shared_with: list[str]
+    created_at: float = field(default_factory=time.time)
+    updated_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> Page:
+        return cls(
+            id=d["id"],
+            title=d["title"],
+            content=d["content"],
+            owner_bot_id=d["owner_bot_id"],
+            shared_with=d.get("shared_with", []),
+            created_at=d.get("created_at", time.time()),
+            updated_at=d.get("updated_at", time.time()),
+        )
+
+
+class PageManager:
+    """Manages collaborative Pages for bots (x.ai: Pages - reports, memos, dashboards)."""
+
+    def __init__(self, path: Path = BOT_HOME / "pages.json") -> None:
+        self.path = path
+        self._pages: dict[str, Page] = {}
+        self._lock = threading.Lock()
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            self._pages = {}
+            return
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._pages = {p["id"]: Page.from_dict(p) for p in data}
+        except (OSError, ValueError, KeyError):
+            log.exception("Failed to load pages; starting empty")
+            self._pages = {}
+
+    def _save(self) -> None:
+        tmp = self.path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump([p.to_dict() for p in self._pages.values()], f, indent=2)
+        os.replace(tmp, self.path)
+
+    def create(
+        self,
+        title: str,
+        content: str,
+        owner_bot_id: str,
+        shared_with: list[str] | None = None,
+    ) -> Page:
+        page = Page(
+            id=str(uuid.uuid4()),
+            title=title,
+            content=content,
+            owner_bot_id=owner_bot_id,
+            shared_with=shared_with or [],
+        )
+        with self._lock:
+            self._pages[page.id] = page
+            self._save()
+        return page
+
+    def get(self, page_id: str) -> Page | None:
+        with self._lock:
+            return self._pages.get(page_id)
+
+    def update(self, page_id: str, content: str | None = None) -> Page | None:
+        with self._lock:
+            page = self._pages.get(page_id)
+            if page is None:
+                return None
+            if content is not None:
+                page.content = content
+                page.updated_at = time.time()
+                self._save()
+            return page
+
+    def share_with(self, page_id: str, bot_id: str) -> Page | None:
+        with self._lock:
+            page = self._pages.get(page_id)
+            if page is None:
+                return None
+            if bot_id not in page.shared_with:
+                page.shared_with.append(bot_id)
+                page.updated_at = time.time()
+                self._save()
+            return page
+
+    def list_for_bot(self, bot_id: str) -> list[Page]:
+        with self._lock:
+            return [
+                p
+                for p in self._pages.values()
+                if p.owner_bot_id == bot_id or bot_id in p.shared_with
+            ]
+
+    def delete(self, page_id: str) -> bool:
+        with self._lock:
+            if page_id not in self._pages:
+                return False
+            del self._pages[page_id]
+            self._save()
+            return True
+
+
+# --------------------------------------------------------------------------- #
+# Cloud Agents (x.ai: cloud agents - background task agents)
+# --------------------------------------------------------------------------- #
+@dataclass
+class CloudAgent:
+    """A cloud agent that runs background tasks (x.ai: cloud agents)."""
+
+    id: str
+    name: str
+    mode: str  # e.g. "code", "research", "analysis", "writing"
+    status: str  # "idle", "running", "completed", "failed"
+    task: str | None = None
+    result: str | None = None
+    created_at: float = field(default_factory=time.time)
+    started_at: float | None = None
+    completed_at: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> CloudAgent:
+        return cls(
+            id=d["id"],
+            name=d["name"],
+            mode=d["mode"],
+            status=d["status"],
+            task=d.get("task"),
+            result=d.get("result"),
+            created_at=d.get("created_at", time.time()),
+            started_at=d.get("started_at"),
+            completed_at=d.get("completed_at"),
+        )
+
+
+class CloudAgentManager:
+    """Manages cloud agents that run background tasks."""
+
+    def __init__(self, path: Path = BOT_HOME / "cloud_agents.json") -> None:
+        self.path = path
+        self._agents: dict[str, CloudAgent] = {}
+        self._lock = threading.Lock()
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            self._agents = {}
+            return
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._agents = {a["id"]: CloudAgent.from_dict(a) for a in data}
+        except (OSError, ValueError, KeyError):
+            log.exception("Failed to load cloud agents; starting empty")
+            self._agents = {}
+
+    def _save(self) -> None:
+        tmp = self.path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump([a.to_dict() for a in self._agents.values()], f, indent=2)
+        os.replace(tmp, self.path)
+
+    def create(self, name: str, mode: str, task: str) -> CloudAgent:
+        agent = CloudAgent(
+            id=str(uuid.uuid4()),
+            name=name,
+            mode=mode,
+            status="idle",
+            task=task,
+        )
+        with self._lock:
+            self._agents[agent.id] = agent
+            self._save()
+        return agent
+
+    def get(self, agent_id: str) -> CloudAgent | None:
+        with self._lock:
+            return self._agents.get(agent_id)
+
+    def list(self) -> list[CloudAgent]:
+        with self._lock:
+            return list(self._agents.values())
+
+    def start(self, agent_id: str) -> CloudAgent | None:
+        with self._lock:
+            agent = self._agents.get(agent_id)
+            if agent is None:
+                return None
+            agent.status = "running"
+            agent.started_at = time.time()
+            self._save()
+            return agent
+
+    def complete(self, agent_id: str, result: str) -> CloudAgent | None:
+        with self._lock:
+            agent = self._agents.get(agent_id)
+            if agent is None:
+                return None
+            agent.status = "completed"
+            agent.result = result
+            agent.completed_at = time.time()
+            self._save()
+            return agent
+
+    def fail(self, agent_id: str, error: str) -> CloudAgent | None:
+        with self._lock:
+            agent = self._agents.get(agent_id)
+            if agent is None:
+                return None
+            agent.status = "failed"
+            agent.result = f"error: {error}"
+            agent.completed_at = time.time()
+            self._save()
+            return agent
+
+    def delete(self, agent_id: str) -> bool:
+        with self._lock:
+            if agent_id not in self._agents:
+                return False
+            del self._agents[agent_id]
+            self._save()
+            return True
+
+
+# --------------------------------------------------------------------------- #
+# Email Forwarding (x.ai: email forwarding)
+# --------------------------------------------------------------------------- #
+@dataclass
+class Email:
+    """Represents an email that a bot can forward."""
+
+    id: str
+    from_addr: str
+    to_addr: str
+    subject: str
+    body: str
+    status: str  # "draft", "sent", "failed"
+    created_at: float = field(default_factory=time.time)
+    sent_at: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> Email:
+        return cls(
+            id=d["id"],
+            from_addr=d["from_addr"],
+            to_addr=d["to_addr"],
+            subject=d["subject"],
+            body=d["body"],
+            status=d.get("status", "draft"),
+            created_at=d.get("created_at", time.time()),
+            sent_at=d.get("sent_at"),
+        )
+
+
+class EmailManager:
+    """Manages email forwarding for bots."""
+
+    def __init__(self, path: Path = BOT_HOME / "emails.json") -> None:
+        self.path = path
+        self._emails: dict[str, Email] = {}
+        self._lock = threading.Lock()
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            self._emails = {}
+            return
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._emails = {e["id"]: Email.from_dict(e) for e in data}
+        except (OSError, ValueError, KeyError):
+            log.exception("Failed to load emails; starting empty")
+            self._emails = {}
+
+    def _save(self) -> None:
+        tmp = self.path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump([e.to_dict() for e in self._emails.values()], f, indent=2)
+        os.replace(tmp, self.path)
+
+    def draft(
+        self,
+        from_addr: str,
+        to_addr: str,
+        subject: str,
+        body: str,
+    ) -> Email:
+        email = Email(
+            id=str(uuid.uuid4()),
+            from_addr=from_addr,
+            to_addr=to_addr,
+            subject=subject,
+            body=body,
+            status="draft",
+        )
+        with self._lock:
+            self._emails[email.id] = email
+            self._save()
+        return email
+
+    def send(self, email_id: str) -> Email | None:
+        with self._lock:
+            email = self._emails.get(email_id)
+            if email is None:
+                return None
+            email.status = "sent"
+            email.sent_at = time.time()
+            self._save()
+            return email
+
+    def get(self, email_id: str) -> Email | None:
+        with self._lock:
+            return self._emails.get(email_id)
+
+    def list(self) -> list[Email]:
+        with self._lock:
+            return list(self._emails.values())
+
+    def delete(self, email_id: str) -> bool:
+        with self._lock:
+            if email_id not in self._emails:
+                return False
+            del self._emails[email_id]
+            self._save()
+            return True
+
+
+# --------------------------------------------------------------------------- #
+# Calendar Integration (x.ai: Google Calendar, Outlook Calendar)
+# --------------------------------------------------------------------------- #
+@dataclass
+class CalendarEvent:
+    """Represents a calendar event."""
+
+    id: str
+    title: str
+    start_time: float
+    end_time: float
+    description: str
+    attendees: list[str]
+    status: str  # "scheduled", "confirmed", "cancelled"
+    created_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> CalendarEvent:
+        return cls(
+            id=d["id"],
+            title=d["title"],
+            start_time=d["start_time"],
+            end_time=d["end_time"],
+            description=d["description"],
+            attendees=d.get("attendees", []),
+            status=d.get("status", "scheduled"),
+            created_at=d.get("created_at", time.time()),
+        )
+
+
+class CalendarManager:
+    """Manages calendar events for bots (Google Calendar, Outlook Calendar)."""
+
+    def __init__(self, path: Path = BOT_HOME / "calendar.json") -> None:
+        self.path = path
+        self._events: dict[str, CalendarEvent] = {}
+        self._lock = threading.Lock()
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            self._events = {}
+            return
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._events = {e["id"]: CalendarEvent.from_dict(e) for e in data}
+        except (OSError, ValueError, KeyError):
+            log.exception("Failed to load calendar events; starting empty")
+            self._events = {}
+
+    def _save(self) -> None:
+        tmp = self.path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump([e.to_dict() for e in self._events.values()], f, indent=2)
+        os.replace(tmp, self.path)
+
+    def create(
+        self,
+        title: str,
+        start_time: float,
+        end_time: float,
+        description: str,
+        attendees: list[str] | None = None,
+    ) -> CalendarEvent:
+        event = CalendarEvent(
+            id=str(uuid.uuid4()),
+            title=title,
+            start_time=start_time,
+            end_time=end_time,
+            description=description,
+            attendees=attendees or [],
+            status="scheduled",
+        )
+        with self._lock:
+            self._events[event.id] = event
+            self._save()
+        return event
+
+    def get(self, event_id: str) -> CalendarEvent | None:
+        with self._lock:
+            return self._events.get(event_id)
+
+    def list(self) -> list[CalendarEvent]:
+        with self._lock:
+            return list(self._events.values())
+
+    def cancel(self, event_id: str) -> CalendarEvent | None:
+        with self._lock:
+            event = self._events.get(event_id)
+            if event is None:
+                return None
+            event.status = "cancelled"
+            self._save()
+            return event
+
+    def delete(self, event_id: str) -> bool:
+        with self._lock:
+            if event_id not in self._events:
+                return False
+            del self._events[event_id]
+            self._save()
+            return True
+
+
+# --------------------------------------------------------------------------- #
+# Image/Video Creation (x.ai: image and video creation)
+# --------------------------------------------------------------------------- #
+@dataclass
+class MediaAsset:
+    """Represents a generated image or video."""
+
+    id: str
+    title: str
+    media_type: str  # "image" or "video"
+    prompt: str
+    file_path: str
+    size_bytes: int
+    created_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> MediaAsset:
+        return cls(
+            id=d["id"],
+            title=d["title"],
+            media_type=d["media_type"],
+            prompt=d["prompt"],
+            file_path=d["file_path"],
+            size_bytes=d["size_bytes"],
+            created_at=d.get("created_at", time.time()),
+        )
+
+
+class MediaManager:
+    """Manages generated images and videos for bots."""
+
+    def __init__(self, media_dir: Path = BOT_HOME / "media") -> None:
+        self.path = BOT_HOME / "media.json"
+        self.media_dir = media_dir
+        self.media_dir.mkdir(parents=True, exist_ok=True)
+        self._assets: dict[str, MediaAsset] = {}
+        self._lock = threading.Lock()
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            self._assets = {}
+            return
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._assets = {a["id"]: MediaAsset.from_dict(a) for a in data}
+        except (OSError, ValueError, KeyError):
+            log.exception("Failed to load media assets; starting empty")
+            self._assets = {}
+
+    def _save(self) -> None:
+        tmp = self.path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump([a.to_dict() for a in self._assets.values()], f, indent=2)
+        os.replace(tmp, self.path)
+
+    def create(
+        self,
+        title: str,
+        media_type: str,
+        prompt: str,
+        file_path: str,
+        size_bytes: int,
+    ) -> MediaAsset:
+        asset = MediaAsset(
+            id=str(uuid.uuid4()),
+            title=title,
+            media_type=media_type,
+            prompt=prompt,
+            file_path=file_path,
+            size_bytes=size_bytes,
+        )
+        with self._lock:
+            self._assets[asset.id] = asset
+            self._save()
+        return asset
+
+    def get(self, asset_id: str) -> MediaAsset | None:
+        with self._lock:
+            return self._assets.get(asset_id)
+
+    def list(self) -> list[MediaAsset]:
+        with self._lock:
+            return list(self._assets.values())
+
+    def delete(self, asset_id: str) -> bool:
+        with self._lock:
+            if asset_id not in self._assets:
+                return False
+            asset = self._assets[asset_id]
+            try:
+                Path(asset.file_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+            del self._assets[asset_id]
+            self._save()
+            return True
+
+
+# --------------------------------------------------------------------------- #
+# Shopping Cart / Checkout (x.ai: shopping cards, checkout)
+# --------------------------------------------------------------------------- #
+@dataclass
+class CartItem:
+    """An item in a shopping cart."""
+
+    id: str
+    product_name: str
+    price: float
+    quantity: int
+    url: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> CartItem:
+        return cls(
+            id=d["id"],
+            product_name=d["product_name"],
+            price=d["price"],
+            quantity=d["quantity"],
+            url=d["url"],
+        )
+
+
+@dataclass
+class ShoppingCart:
+    """A shopping cart for a bot."""
+
+    id: str
+    owner_bot_id: str
+    items: list[CartItem]
+    status: str  # "active", "checked_out", "abandoned"
+    created_at: float = field(default_factory=time.time)
+    checked_out_at: float | None = None
+
+    def total(self) -> float:
+        return sum(item.price * item.quantity for item in self.items)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> ShoppingCart:
+        return cls(
+            id=d["id"],
+            owner_bot_id=d["owner_bot_id"],
+            items=[CartItem.from_dict(i) for i in d.get("items", [])],
+            status=d.get("status", "active"),
+            created_at=d.get("created_at", time.time()),
+            checked_out_at=d.get("checked_out_at"),
+        )
+
+
+class CartManager:
+    """Manages shopping carts for bots (x.ai: shopping cards, checkout)."""
+
+    def __init__(self, path: Path = BOT_HOME / "carts.json") -> None:
+        self.path = path
+        self._carts: dict[str, ShoppingCart] = {}
+        self._lock = threading.Lock()
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            self._carts = {}
+            return
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._carts = {c["id"]: ShoppingCart.from_dict(c) for c in data}
+        except (OSError, ValueError, KeyError):
+            log.exception("Failed to load carts; starting empty")
+            self._carts = {}
+
+    def _save(self) -> None:
+        tmp = self.path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump([c.to_dict() for c in self._carts.values()], f, indent=2)
+        os.replace(tmp, self.path)
+
+    def create(self, owner_bot_id: str) -> ShoppingCart:
+        cart = ShoppingCart(
+            id=str(uuid.uuid4()),
+            owner_bot_id=owner_bot_id,
+            items=[],
+            status="active",
+        )
+        with self._lock:
+            self._carts[cart.id] = cart
+            self._save()
+        return cart
+
+    def get(self, cart_id: str) -> ShoppingCart | None:
+        with self._lock:
+            return self._carts.get(cart_id)
+
+    def list_for_bot(self, bot_id: str) -> list[ShoppingCart]:
+        with self._lock:
+            return [c for c in self._carts.values() if c.owner_bot_id == bot_id]
+
+    def add_item(
+        self,
+        cart_id: str,
+        product_name: str,
+        price: float,
+        quantity: int,
+        url: str,
+    ) -> ShoppingCart | None:
+        with self._lock:
+            cart = self._carts.get(cart_id)
+            if cart is None:
+                return None
+            item = CartItem(
+                id=str(uuid.uuid4()),
+                product_name=product_name,
+                price=price,
+                quantity=quantity,
+                url=url,
+            )
+            cart.items.append(item)
+            self._save()
+            return cart
+
+    def checkout(self, cart_id: str) -> ShoppingCart | None:
+        with self._lock:
+            cart = self._carts.get(cart_id)
+            if cart is None:
+                return None
+            cart.status = "checked_out"
+            cart.checked_out_at = time.time()
+            self._save()
+            return cart
+
+    def delete(self, cart_id: str) -> bool:
+        with self._lock:
+            if cart_id not in self._carts:
+                return False
+            del self._carts[cart_id]
+            self._save()
+            return True
+
+
+# --------------------------------------------------------------------------- #
+# Tailscale / Private Network (x.ai: Tailscale plugin, private networks)
+# --------------------------------------------------------------------------- #
+@dataclass
+class NetworkPeer:
+    """A peer in a private network (Tailscale)."""
+
+    id: str
+    name: str
+    ip: str
+    status: str  # "online", "offline", "connecting"
+    last_seen: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> NetworkPeer:
+        return cls(
+            id=d["id"],
+            name=d["name"],
+            ip=d["ip"],
+            status=d["status"],
+            last_seen=d.get("last_seen"),
+        )
+
+
+class NetworkManager:
+    """Manages private network peers (Tailscale, route traffic)."""
+
+    def __init__(self, path: Path = BOT_HOME / "network.json") -> None:
+        self.path = path
+        self._peers: dict[str, NetworkPeer] = {}
+        self._lock = threading.Lock()
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            self._peers = {}
+            return
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._peers = {p["id"]: NetworkPeer.from_dict(p) for p in data}
+        except (OSError, ValueError, KeyError):
+            log.exception("Failed to load network peers; starting empty")
+            self._peers = {}
+
+    def _save(self) -> None:
+        tmp = self.path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump([p.to_dict() for p in self._peers.values()], f, indent=2)
+        os.replace(tmp, self.path)
+
+    def add_peer(
+        self,
+        name: str,
+        ip: str,
+        status: str = "online",
+    ) -> NetworkPeer:
+        peer = NetworkPeer(
+            id=str(uuid.uuid4()),
+            name=name,
+            ip=ip,
+            status=status,
+            last_seen=time.time() if status == "online" else None,
+        )
+        with self._lock:
+            self._peers[peer.id] = peer
+            self._save()
+        return peer
+
+    def get(self, peer_id: str) -> NetworkPeer | None:
+        with self._lock:
+            return self._peers.get(peer_id)
+
+    def list(self) -> list[NetworkPeer]:
+        with self._lock:
+            return list(self._peers.values())
+
+    def update_status(self, peer_id: str, status: str) -> NetworkPeer | None:
+        with self._lock:
+            peer = self._peers.get(peer_id)
+            if peer is None:
+                return None
+            peer.status = status
+            if status == "online":
+                peer.last_seen = time.time()
+            self._save()
+            return peer
+
+    def delete(self, peer_id: str) -> bool:
+        with self._lock:
+            if peer_id not in self._peers:
+                return False
+            del self._peers[peer_id]
+            self._save()
+            return True
+
+
+# --------------------------------------------------------------------------- #
 # Extended __all__
 # --------------------------------------------------------------------------- #
 __all__ = [
@@ -1095,18 +2247,38 @@ __all__ = [
     "BotManager",
     "BotMemory",
     "BotStatus",
+    "CalendarEvent",
+    "CalendarManager",
+    "CartItem",
+    "CartManager",
+    "CloudAgent",
+    "CloudAgentManager",
+    "ConnectorShareManager",
+    "Email",
+    "EmailManager",
     "FileHandler",
+    "MediaAsset",
+    "MediaManager",
     "Meeting",
     "MeetingManager",
     "Memory",
     "MemoryImporter",
+    "NetworkManager",
+    "NetworkPeer",
+    "Page",
+    "PageManager",
+    "ReviewLearning",
+    "ReviewQueue",
     "Routine",
     "RoutineScheduler",
     "RoutineStatus",
+    "SharedConnector",
     "SkillLibrary",
     "SkillTemplate",
     "Vault",
     "VaultEntry",
+    "VoiceManager",
+    "VoiceSettings",
     "create_bot",
     "get_bot",
 ]

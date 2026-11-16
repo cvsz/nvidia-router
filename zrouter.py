@@ -68,8 +68,15 @@ import requests
 
 from zrouter_bot import (
     BotHealth,
+    CalendarManager,
+    CartManager,
+    CloudAgentManager,
+    EmailManager,
     FileHandler,
+    MediaManager,
     MeetingManager,
+    NetworkManager,
+    PageManager,
     Routine,
     RoutineScheduler,
     SkillLibrary,
@@ -1622,7 +1629,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     b.add_argument(
         "subcmd",
-        help="subcommand: status, vault, memory, approval, approve, deny, routine, skill, file, meeting, health",
+        help="subcommand: status, vault, memory, approval, approve, deny, routine, skill, file, meeting, page, agent, email, calendar, media, cart, network, health",
     )
     b.add_argument(
         "arg",
@@ -1634,17 +1641,38 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         help="second subcommand argument (e.g. vault id, memory key, value)",
     )
+    b.add_argument(
+        "arg3",
+        nargs="?",
+        help="third subcommand argument",
+    )
+    b.add_argument(
+        "arg4",
+        nargs="?",
+        help="fourth subcommand argument",
+    )
+    b.add_argument(
+        "arg3",
+        nargs="?",
+        help="third subcommand argument",
+    )
     b.add_argument("--value", help="value for memory set or vault update")
     b.add_argument("--details", help="details for approval card creation")
     b.add_argument(
         "--schedule", help="schedule for routine (e.g. daily 09:00, every 1 hour)"
     )
-    b.add_argument("--title", help="meeting title")
+    b.add_argument("--title", help="meeting/page title")
     b.add_argument(
         "--platform", help="meeting platform (zoom, google_meet, microsoft_teams)"
     )
     b.add_argument("--link", help="meeting link URL")
     b.add_argument("--at", type=float, help="meeting scheduled time (unix timestamp)")
+    b.add_argument("--mode", help="agent mode (code, research, analysis, writing)")
+    b.add_argument("--task", help="cloud agent task description")
+    b.add_argument("--from", dest="from_addr", help="email from address")
+    b.add_argument("--to", dest="to_addr", help="email to address")
+    b.add_argument("--subject", help="email subject")
+    b.add_argument("--body", help="email/message body")
     h = add(
         "help",
         "detailed help: quickstart, keys, routes, serve, config, env, troubleshooting",
@@ -1945,9 +1973,221 @@ def _bot_cmd(a: Any) -> None:
                 "  Usage: zrouter bot meeting list | add --title <t> --platform <p> --link <url> --at <ts> | join <id>"
             )
 
+    elif a.subcmd == "page":
+        pm = PageManager()
+        if a.arg == "list":
+            pages = pm.list_for_bot(bot.id)
+            if not pages:
+                print("  No pages.")
+            for p in pages:
+                print(
+                    f"  {p.id[:8]}  {p.title:<25} {'owner' if p.owner_bot_id == bot.id else 'shared'}"
+                )
+        elif a.arg == "create" and a.arg2 and a.value:
+            page = pm.create(a.arg2, a.value, bot.id)
+            print(f"  Created page: {page.title} id={page.id[:8]}")
+        elif a.arg == "get" and a.arg2:
+            p = pm.get(a.arg2)
+            if p:
+                print(f"  {p.title}: {p.content[:100]}...")
+            else:
+                print(f"  Page {a.arg2} not found.")
+        elif a.arg == "update" and a.arg2 and a.value:
+            p = pm.update(a.arg2, a.value)
+            if p:
+                print(f"  Updated page: {p.title}")
+            else:
+                print(f"  Page {a.arg2} not found.")
+        elif a.arg == "share" and a.arg2:
+            p = pm.share_with(a.arg2, bot.id)
+            if p:
+                print(f"  Shared page: {p.title}")
+            else:
+                print(f"  Page {a.arg2} not found.")
+        elif a.arg == "delete" and a.arg2:
+            ok = pm.delete(a.arg2)
+            print(f"  Deleted: {ok}")
+        else:
+            print(
+                "  Usage: zrouter bot page list | create <title> --value <content> | get <id> | update <id> --value <content> | share <id> | delete <id>"
+            )
+
+    elif a.subcmd == "agent":
+        cam = CloudAgentManager()
+        if a.arg2 == "list":
+            agents = cam.list()
+            if not agents:
+                print("  No agents.")
+            for ag in agents:
+                print(f"  {ag.id[:8]}  {ag.name:<20} {ag.mode:<12} {ag.status}")
+        elif a.arg == "create" and a.arg2 and a.mode and a.task:
+            agent = cam.create(a.arg2, a.mode, a.task)
+            print(f"  Created agent: {agent.name} ({agent.mode}) id={agent.id[:8]}")
+        elif a.arg == "start" and a.arg2:
+            agent = cam.start(a.arg3)
+            if agent:
+                print(f"  Started agent: {agent.name}")
+            else:
+                print(f"  Agent {a.arg3} not found.")
+        elif a.arg == "complete" and a.arg2 and a.value:
+            agent = cam.complete(a.arg2, a.value)
+            if agent:
+                print(f"  Completed agent: {agent.name}")
+            else:
+                print(f"  Agent {a.arg3} not found.")
+        elif a.arg == "fail" and a.arg2 and a.value:
+            agent = cam.fail(a.arg2, a.value)
+            if agent:
+                print(f"  Failed agent: {agent.name}")
+            else:
+                print(f"  Agent {a.arg3} not found.")
+        elif a.arg == "delete" and a.arg2:
+            ok = cam.delete(a.arg3)
+            print(f"  Deleted: {ok}")
+        else:
+            print(
+                "  Usage: zrouter bot agent list | create <name> --mode <m> --task <t> | start <id> | complete <id> --value <result> | fail <id> --value <error> | delete <id>"
+            )
+
+    elif a.subcmd == "email":
+        em = EmailManager()
+        if a.arg == "list":
+            emails = em.list()
+            if not emails:
+                print("  No emails.")
+            for e in emails:
+                print(
+                    f"  {e.id[:8]}  {e.subject:<30} {e.from_addr:<20} -> {e.to_addr:<20} {e.status}"
+                )
+        elif a.arg == "draft" and a.from_addr and a.to_addr and a.subject and a.body:
+            email = em.draft(a.from_addr, a.to_addr, a.subject, a.body)
+            print(f"  Drafted email: {email.subject} id={email.id[:8]}")
+        elif a.arg == "send" and a.arg2:
+            email = em.send(a.arg2)
+            if email:
+                print(f"  Sent email: {email.subject}")
+            else:
+                print(f"  Email {a.arg2} not found.")
+        elif a.arg == "delete" and a.arg2:
+            ok = em.delete(a.arg2)
+            print(f"  Deleted: {ok}")
+        else:
+            print(
+                "  Usage: zrouter bot email list | draft --from <f> --to <t> --subject <s> --body <b> | send <id> | delete <id>"
+            )
+
+    elif a.subcmd == "calendar":
+        cal = CalendarManager()
+        if a.arg == "list":
+            events = cal.list()
+            if not events:
+                print("  No events.")
+            for e in events:
+                print(f"  {e.id[:8]}  {e.title:<25} {e.status}")
+        elif a.arg == "create" and a.arg2 and a.at is not None and a.value:
+            event = cal.create(a.title, a.at, a.at + 3600, a.value)
+            print(f"  Created event: {event.title} id={event.id[:8]}")
+        elif a.arg == "cancel" and a.arg2:
+            event = cal.cancel(a.arg2)
+            if event:
+                print(f"  Cancelled event: {event.title}")
+            else:
+                print(f"  Event {a.arg2} not found.")
+        else:
+            print(
+                "  Usage: zrouter bot calendar list | create <title> --at <ts> --value <desc> | cancel <id>"
+            )
+
+    elif a.subcmd == "media":
+        mm = MediaManager()
+        if a.arg == "list":
+            assets = mm.list()
+            if not assets:
+                print("  No media assets.")
+            for a_ in assets:
+                print(
+                    f"  {a_.id[:8]}  {a_.title:<25} {a_.media_type:<8} {a_.size_bytes} bytes"
+                )
+        elif a.arg == "create" and a.arg2 and a.mode and a.value:
+            asset = mm.create(
+                a.title, a.media_type, a.value, a.value, len(a.value.encode())
+            )
+            print(
+                f"  Created media: {asset.title} ({asset.media_type}) id={asset.id[:8]}"
+            )
+        elif a.arg == "delete" and a.arg2:
+            ok = mm.delete(a.arg2)
+            print(f"  Deleted: {ok}")
+        else:
+            print(
+                "  Usage: zrouter bot media list | create <title> --mode <image|video> --value <prompt|path> | delete <id>"
+            )
+
+    elif a.subcmd == "cart":
+        cm = CartManager()
+        if a.arg == "list":
+            carts = cm.list_for_bot(bot.id)
+            if not carts:
+                print("  No carts.")
+            for c in carts:
+                print(
+                    f"  {c.id[:8]}  {c.status:<12} total=${c.total():.2f} items={len(c.items)}"
+                )
+        elif a.arg == "add-item" and a.arg2 and a.value and a.value2:
+            try:
+                price = float(a.value)
+                quantity = int(a.value2)
+            except (ValueError, TypeError):
+                print(
+                    "  Error: price must be a number and quantity must be an integer."
+                )
+            else:
+                carts = cm.list_for_bot(bot.id)
+                if carts:
+                    cart = carts[0]
+                else:
+                    cart = cm.create(bot.id)
+                cart = cm.add_item(cart.id, a.arg2, price, quantity, a.arg3 or "")
+                print(f"  Added item to cart: {a.arg3}")
+        elif a.arg == "checkout" and a.arg2:
+            cart = cm.checkout(a.arg2)
+            if cart:
+                print(f"  Checked out cart: total=${cart.total():.2f}")
+            else:
+                print(f"  Cart {a.arg2} not found.")
+        else:
+            print(
+                "  Usage: zrouter bot cart list | add-item <name> --value <price> --value2 <qty> [url] | checkout <id>"
+            )
+
+    elif a.subcmd == "network":
+        nm = NetworkManager()
+        if a.arg == "list":
+            peers = nm.list()
+            if not peers:
+                print("  No peers.")
+            for p in peers:
+                print(f"  {p.id[:8]}  {p.name:<20} {p.ip:<20} {p.status}")
+        elif a.arg == "add" and a.arg2 and a.value:
+            peer = nm.add_peer(a.arg2, a.value)
+            print(f"  Added peer: {peer.name} ({peer.ip})")
+        elif a.arg == "status" and a.arg2:
+            peer = nm.update_status(a.arg2, a.value or "online")
+            if peer:
+                print(f"  Peer status: {peer.status}")
+            else:
+                print(f"  Peer {a.arg2} not found.")
+        elif a.arg == "delete" and a.arg2:
+            ok = nm.delete(a.arg2)
+            print(f"  Deleted: {ok}")
+        else:
+            print(
+                "  Usage: zrouter bot network list | add <name> <ip> | status <id> <online|offline> | delete <id>"
+            )
+
     else:
         print(
-            "  Unknown bot subcommand. Use: status, health, vault, memory, approval, approve, deny, routine, skill, file, meeting"
+            "  Unknown bot subcommand. Use: status, health, vault, memory, approval, approve, deny, routine, skill, file, meeting, page, agent, email, calendar, media, cart, network"
         )
 
 
