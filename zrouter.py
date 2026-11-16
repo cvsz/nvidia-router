@@ -59,11 +59,23 @@ import re
 import sys
 import threading
 import time
+import uuid
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 import requests
+
+from zrouter_bot import (
+    BotHealth,
+    FileHandler,
+    MeetingManager,
+    Routine,
+    RoutineScheduler,
+    SkillLibrary,
+    VaultEntry,
+    get_bot,
+)
 
 log = logging.getLogger("nvrouter")
 
@@ -1604,6 +1616,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="require 'Authorization: Bearer TOKEN' (or ROUTER_TOKEN); "
         "strongly advised if host is not 127.0.0.1",
     )
+    b = add(
+        "bot",
+        "bot framework: status, vault, memory, approvals, routines, skills, files, meetings",
+    )
+    b.add_argument(
+        "subcmd",
+        help="subcommand: status, vault, memory, approval, approve, deny, routine, skill, file, meeting, health",
+    )
+    b.add_argument(
+        "arg",
+        nargs="?",
+        help="subcommand argument (e.g. card id, skill id, file name, memory key)",
+    )
+    b.add_argument(
+        "arg2",
+        nargs="?",
+        help="second subcommand argument (e.g. vault id, memory key, value)",
+    )
+    b.add_argument("--value", help="value for memory set or vault update")
+    b.add_argument("--details", help="details for approval card creation")
+    b.add_argument(
+        "--schedule", help="schedule for routine (e.g. daily 09:00, every 1 hour)"
+    )
+    b.add_argument("--title", help="meeting title")
+    b.add_argument(
+        "--platform", help="meeting platform (zoom, google_meet, microsoft_teams)"
+    )
+    b.add_argument("--link", help="meeting link URL")
+    b.add_argument("--at", type=float, help="meeting scheduled time (unix timestamp)")
     h = add(
         "help",
         "detailed help: quickstart, keys, routes, serve, config, env, troubleshooting",
@@ -1623,6 +1664,10 @@ def main() -> None:
         return
     if a.cmd == "help":
         return print_help_topic(ap, a.topic)
+
+    if a.cmd == "bot":
+        _bot_cmd(a)
+        return
 
     logging.basicConfig(
         level=logging.INFO if a.verbose or a.cmd == "serve" else logging.WARNING,
@@ -1722,6 +1767,188 @@ def main() -> None:
     finally:
         if r.stats:
             r.stats.flush()
+
+
+def _bot_cmd(a: Any) -> None:
+    """Handle bot subcommands."""
+    bot = get_bot()
+
+    if a.subcmd == "status":
+        d = bot.to_dict()
+        print(f"Bot: {d['name']} (id={d['id']})")
+        print(f"  Status: {d['status_phrase']} ({d['status']})")
+        print(f"  Vault entries: {d['vault_entries']}")
+        print(f"  Memory keys: {d['memory_keys']}")
+        print(f"  Pending approvals: {d['pending_approvals']}")
+
+    elif a.subcmd == "health":
+        report = BotHealth(bot).report()
+        for k, v in report.items():
+            print(f"  {k}: {v}")
+
+    elif a.subcmd == "vault":
+        if a.arg == "list":
+            entries = bot.vault_list()
+            if not entries:
+                print("  No vault entries.")
+            for e in entries:
+                print(f"  {e.id[:8]}  {e.kind:<12} {e.name}")
+        elif a.arg == "get" and a.arg2:
+            e = bot.vault_get(a.arg2)
+            if e:
+                print(f"  {e.name} ({e.kind}): {e.value}")
+            else:
+                print(f"  Vault entry {a.arg2} not found.")
+        elif a.arg == "add" and a.arg2 and a.value:
+            import json as _json
+
+            try:
+                val = _json.loads(a.value)
+            except (ValueError, TypeError):
+                val = {"raw": a.value}
+            e = VaultEntry(id=str(uuid.uuid4()), name=a.arg2, kind="secret", value=val)
+            bot.vault_add(e)
+            print(f"  Added vault entry {e.id[:8]}: {e.name}")
+        elif a.arg == "delete" and a.arg2:
+            ok = bot.vault_delete(a.arg2)
+            print(f"  Deleted: {ok}")
+        else:
+            print(
+                "  Usage: zrouter bot vault list | get <id> | add <name> <value> | delete <id>"
+            )
+
+    elif a.subcmd == "memory":
+        if a.arg == "list":
+            mem = bot.all_memory()
+            if not mem:
+                print("  No memory entries.")
+            for k, v in mem.items():
+                print(f"  {k}: {v}")
+        elif a.arg == "get" and a.arg2:
+            print(f"  {a.arg2}: {bot.recall(a.arg2)}")
+        elif a.arg == "set" and a.arg2 and a.value:
+            bot.remember(a.arg2, a.value)
+            print(f"  Set {a.arg2} = {a.value}")
+        elif a.arg == "delete" and a.arg2:
+            ok = bot.forget(a.arg2)
+            print(f"  Deleted: {ok}")
+        else:
+            print(
+                "  Usage: zrouter bot memory list | get <key> | set <key> --value <value> | delete <key>"
+            )
+
+    elif a.subcmd == "approval":
+        cards = bot.pending_approvals()
+        if not cards:
+            print("  No pending approvals.")
+        for c in cards:
+            print(f"  {c.id[:8]}  {c.action:<20} {c.status.value:<12} {c.details}")
+
+    elif a.subcmd == "approve" and a.arg:
+        card = bot.approve_card(a.arg, decided_by="cli")
+        if card:
+            print(f"  Approved: {card.action}")
+        else:
+            print(f"  Card {a.arg} not found or already decided.")
+
+    elif a.subcmd == "deny" and a.arg:
+        card = bot.deny_card(a.arg, decided_by="cli")
+        if card:
+            print(f"  Denied: {card.action}")
+        else:
+            print(f"  Card {a.arg} not found or already decided.")
+
+    elif a.subcmd == "routine":
+        scheduler = RoutineScheduler()
+        if a.arg == "list":
+            routines = scheduler.list()
+            if not routines:
+                print("  No routines.")
+            for r in routines:
+                print(f"  {r.id[:8]}  {r.name:<20} {r.status.value:<12} {r.schedule}")
+        elif a.arg == "add" and a.arg2:
+            routine = Routine(
+                id=str(uuid.uuid4()),
+                name=a.arg2,
+                action="chat",
+                params={"prompt": a.value or ""},
+                schedule=a.schedule or "daily 09:00",
+            )
+            scheduler.add(routine)
+            print(f"  Added routine {routine.id[:8]}: {routine.name}")
+        else:
+            print("  Usage: zrouter bot routine list | add <name> [schedule]")
+
+    elif a.subcmd == "skill":
+        library = SkillLibrary()
+        if a.arg == "list":
+            skills = library.list()
+            if not skills:
+                print("  No skills.")
+            for s in skills:
+                print(
+                    f"  {s.id[:8]}  {s.name:<20} {s.category:<12} params={','.join(s.parameters)}"
+                )
+        elif a.arg == "use" and a.arg2 and a.value:
+            import json as _json
+
+            try:
+                params = _json.loads(a.value)
+            except (ValueError, TypeError):
+                params = {"text": a.value}
+            result = library.use(a.arg2, params)
+            print(f"  {result}")
+        else:
+            print("  Usage: zrouter bot skill list | use <id> --value <json>")
+
+    elif a.subcmd == "file":
+        fh = FileHandler()
+        if a.arg == "list":
+            files = fh.list_files()
+            if not files:
+                print("  No files.")
+            for f in files:
+                print(f"  {f['name']:<40} {f['size']:>10} bytes  {f['extension']}")
+        elif a.arg == "upload" and a.arg2:
+            from pathlib import Path as _Path
+
+            p = _Path(a.arg2)
+            if p.exists():
+                meta = fh.save_file(p.name, p.read_bytes())
+                print(
+                    f"  Uploaded: {meta['id'][:8]}  {meta['original_name']} ({meta['size']} bytes)"
+                )
+            else:
+                print(f"  File not found: {a.arg2}")
+        else:
+            print("  Usage: zrouter bot file list | upload <path>")
+
+    elif a.subcmd == "meeting":
+        mm = MeetingManager()
+        if a.arg == "list":
+            meetings = mm.list()
+            if not meetings:
+                print("  No meetings.")
+            for m in meetings:
+                print(f"  {m.id[:8]}  {m.title:<25} {m.platform:<15} {m.status}")
+        elif a.arg == "add" and a.title and a.platform and a.link and a.at is not None:
+            m = mm.schedule(a.title, a.platform, a.link, a.at)
+            print(f"  Scheduled: {m.title} ({m.platform}) id={m.id[:8]}")
+        elif a.arg == "join" and a.arg2:
+            m = mm.join(a.arg2)
+            if m:
+                print(f"  Joined: {m.title} ({m.platform})")
+            else:
+                print(f"  Meeting {a.arg2} not found.")
+        else:
+            print(
+                "  Usage: zrouter bot meeting list | add --title <t> --platform <p> --link <url> --at <ts> | join <id>"
+            )
+
+    else:
+        print(
+            "  Unknown bot subcommand. Use: status, health, vault, memory, approval, approve, deny, routine, skill, file, meeting"
+        )
 
 
 if __name__ == "__main__":
