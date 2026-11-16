@@ -546,6 +546,22 @@ sudo systemctl start zrouter
 
 ---
 
+## NVIDIA Credit & Attribution
+
+zrouter is an independent OpenAI-compatible proxy/router that connects to **NVIDIA hosted NIM endpoints** (`https://integrate.api.nvidia.com/v1`) to route requests to free models.
+
+### NVIDIA Trademarks & Branding
+
+- **NVIDIA**, the **NVIDIA logo**, and **NVIDIA NIM** are trademarks or registered trademarks of NVIDIA Corporation in the United States and other countries.
+- The NVIDIA logo image (`static/img/nvidia.png`) is used for attribution purposes only and remains the property of NVIDIA Corporation.
+- zrouter is **not affiliated with, endorsed by, or sponsored by NVIDIA Corporation**.
+
+### API Usage
+
+zrouter calls NVIDIA's hosted NIM API using API keys you provide. Please review NVIDIA's terms of service and model-specific licensing at https://build.nvidia.com before using any model, especially regarding commercial use, data handling, and rate limits.
+
+---
+
 ## License
 
 zrouter is released under the [MIT License](LICENSE).
