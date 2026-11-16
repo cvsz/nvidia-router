@@ -26,8 +26,8 @@
 #   make install:zrouter # install zrouter to $(PREFIX)/bin
 #   make uninstall:zrouter # remove zrouter from $(PREFIX)/bin
 
-.PHONY: all setup test run serve lint format clean help venv install-deps build build\:all build\:web build\:web\:all build\:web\:dev build\:web\:prod build\:web\:ent build\:desktops build\:dev build\:prod build\:ent build\:exe build\:exe\:win build\:gui build\:tui build\:android build\:ios build\:zrouter build\:packages build\:wheel build\:sdist install\:zrouter uninstall\:zrouter zrouter gui docker\:build docker\:run build\:web\:start build\:deploy
-.PHONY: all setup test run serve lint format clean help venv install-deps build build\:all build\:web build\:web\:all build\:web\:dev build\:web\:prod build\:web\:ent build\:desktops build\:dev build\:prod build\:ent build\:exe build\:exe\:win build\:gui build\:tui build\:android build\:ios build\:zrouter build\:packages build\:wheel build\:sdist install\:zrouter uninstall\:zrouter zrouter gui docker\:build docker\:run build\:web\:start build\:deploy
+.PHONY: all setup test run serve lint format clean help venv install-deps build build\:all build\:web build\:web\:all build\:web\:dev build\:web\:prod build\:web\:ent build\:desktops build\:dev build\:prod build\:ent build\:exe build\:exe\:win build\:gui build\:tui build\:android build\:ios build\:zrouter build\:packages build\:wheel build\:sdist install\:zrouter uninstall\:zrouter zrouter gui docker\:build docker\:run build\:web\:start build\:deploy build\:zbot
+.PHONY: all setup test run serve lint format clean help venv install-deps build build\:all build\:web build\:web\:all build\:web\:dev build\:web\:prod build\:web\:ent build\:desktops build\:dev build\:prod build\:ent build\:exe build\:exe\:win build\:gui build\:tui build\:android build\:ios build\:zrouter build\:packages build\:wheel build\:sdist install\:zrouter uninstall\:zrouter zrouter gui docker\:build docker\:run build\:web\:start build\:deploy build\:zbot
 
 PYTHON ?= python3
 VENV := .venv
@@ -70,11 +70,12 @@ help: ## Show this help
 	@echo
 	@echo "Build targets:"
 	@echo "  make build        default build (setup + lint + test + exe)"
-	@echo "  make build:all    build all variants (exe + gui + web + desktops + dev + prod + ent)"
+	@echo "  make build:all    build all variants (exe + gui + web + desktops + dev + prod + ent + zbot)"
 	@echo "  make build:exe    build native CLI executable using PyInstaller"
 	@echo "  make build:exe:win build Windows .exe (requires Wine)"
 	@echo "  make build:gui    build GUI executable using PyInstaller"
 	@echo "  make build:tui    build TUI package"
+	@echo "  make build:zbot   build cross-platform zbot CLI executable"
 	@echo "  make build:web    build web deployment package"
 	@echo "  make build:web:all build all web variants (dev + prod + ent)"
 	@echo "  make build:web:dev build web dev package (hot-reload, debug)"
@@ -190,6 +191,7 @@ build\:all: build ## Build all variants
 	$(MAKE) build\:dev
 	$(MAKE) build\:prod
 	$(MAKE) build\:ent
+	$(MAKE) build\:zbot
 	@echo "==> All variants built"
 
 build\:exe: setup lint test ## Build native CLI executable using PyInstaller
