@@ -486,14 +486,18 @@ sudo systemctl start zrouter
 
 ### Endpoints
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/health` | GET | Health + key status |
-| `/v1/models` | GET | OpenAI model list |
-| `/stats` | GET | Per-model / per-key statistics |
-| `/list` | GET | Allowlisted models grouped by route |
-| `/v1/chat/completions` | POST | OpenAI-compatible chat |
-| `/v1/embeddings` | POST | Embeddings |
+| Endpoint | Method | Auth | Description |
+|---|---|---|---|
+| `/health` | GET | Public | Health + key status |
+| `/v1/models` | GET | Token* | OpenAI model list |
+| `/stats` | GET | Token* | Per-model / per-key statistics |
+| `/list` | GET | Token* | Allowlisted models grouped by route |
+| `/v1/chat/completions` | POST | Token* | OpenAI-compatible chat |
+| `/v1/embeddings` | POST | Token* | Embeddings |
+
+\* Required when `ROUTER_TOKEN` is set. `/health` is always public.
+
+**Request limits:** Max body size 16 MiB (`MAX_CONTENT_LENGTH`), matching `zrouter.py` `_read_body` cap. Requests exceeding this return HTTP 413.
 
 ### Logging
 
