@@ -8,7 +8,7 @@
 docs/ @cvsz @policedbc
 
 # Source code
-nvidia.py @cvsz @policedbc
+zrouter.py @cvsz @policedbc
 zcloud-gui.py @cvsz @arin-z
 zcloud-tui.py @cvsz @arin-z
 zcloud @cvsz

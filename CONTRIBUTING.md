@@ -62,10 +62,10 @@ We use `ruff` for linting and formatting:
 
 ```bash
 # Check for linting issues
-.venv/bin/python -m ruff check nvidia.py test_nvidia.py zcloud-gui.py zcloud-tui.py
+.venv/bin/python -m ruff check zrouter.py test_zrouter.py zcloud-gui.py zcloud-tui.py
 
 # Auto-fix formatting
-.venv/bin/python -m ruff format nvidia.py test_nvidia.py zcloud-gui.py zcloud-tui.py
+.venv/bin/python -m ruff format zrouter.py test_zrouter.py zcloud-gui.py zcloud-tui.py
 ```
 
 ### Testing
@@ -74,10 +74,10 @@ We use `pytest` for testing:
 
 ```bash
 # Run all tests
-.venv/bin/python -m pytest test_nvidia.py -v
+.venv/bin/python -m pytest test_zrouter.py -v
 
 # Run with coverage
-.venv/bin/python -m pytest test_nvidia.py --cov=nvidia.py
+.venv/bin/python -m pytest test_zrouter.py --cov=zrouter.py
 ```
 
 All tests must pass before submitting a pull request.
@@ -92,8 +92,8 @@ All tests must pass before submitting a pull request.
 3. Make your changes
 4. Run tests and linting:
    ```bash
-   .venv/bin/python -m pytest test_nvidia.py
-   .venv/bin/python -m ruff check nvidia.py test_nvidia.py zcloud-gui.py zcloud-tui.py
+   .venv/bin/python -m pytest test_zrouter.py
+   .venv/bin/python -m ruff check zrouter.py test_zrouter.py zcloud-gui.py zcloud-tui.py
    ```
 5. Commit your changes:
    ```bash
