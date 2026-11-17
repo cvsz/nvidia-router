@@ -40,7 +40,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN groupadd -r appuser && useradd -r -g appuser -s /bin/false appuser
 
 # Copy application files (NOT provider.json — keys must come from env)
-COPY --chown=appuser:appuser nvidia.py models.json zcloud zcloud-gui.py ./
+COPY --chown=appuser:appuser zrouter.py models.json ./
 
 # Create data directory
 RUN mkdir -p /app/data /app/logs && chown appuser:appuser /app/data /app/logs
@@ -59,12 +59,12 @@ ENV NVIDIA_MAX_WAIT=60
 # Expose port for the OpenAI-compatible proxy
 EXPOSE 8000
 
-# Health check
+# Health check (requires ROUTER_TOKEN; /health is authenticated)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f -H "Authorization: Bearer ${ROUTER_TOKEN}" http://localhost:8000/health || exit 1
 
-# Default command: run the OpenAI-compatible proxy
-# WARNING: Binding to 0.0.0.0 exposes the proxy on all interfaces.
-# Always set ROUTER_TOKEN when running on 0.0.0.0.
-ENTRYPOINT ["python", "nvidia.py"]
+# Default command: run the OpenAI-compatible proxy.
+# Binding to 0.0.0.0 exposes the proxy on all interfaces; ROUTER_TOKEN is
+# required (serve() fails closed without it). Always set ROUTER_TOKEN at runtime.
+ENTRYPOINT ["python", "zrouter.py"]
 CMD ["serve", "--host", "0.0.0.0", "--port", "8000"]

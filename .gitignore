@@ -19,6 +19,9 @@ build/
 .env.test.local
 .env.production.local
 
+# Secrets (API keys must never be committed)
+provider.json
+
 # IDE
 .idea/
 .vscode/
@@ -43,14 +46,26 @@ __pycache__/
 *.so
 .Python
 venv/
-venv/
+.venv/
 env/
 ENV/
 env.bak/
 venv.bak/
+*.egg-info/
+.eggs/
+*.whl
+
+# Test caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
 # Docker
 .docker/
+
+# Binaries / distributables
+*.zip
+*.deb
 
 # Test coverage
 coverage/

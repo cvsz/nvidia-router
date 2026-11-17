@@ -35,7 +35,7 @@ zrouter is designed with security in mind:
 
 - **No hardcoded API keys** - All API keys must be provided via environment variables or provider.json (which is gitignored)
 - **No secrets in Docker images** - provider.json is not copied into Docker images
-- **Token-based authentication** - The proxy server supports optional bearer token authentication via ROUTER_TOKEN environment variable
+- **Token-based authentication** - The proxy server supports bearer token authentication via `ROUTER_TOKEN`. It is **mandatory** when binding to a non-loopback interface (e.g. `0.0.0.0`); `serve()` fails closed and refuses to start unauthenticated on `0.0.0.0`. `/health` and `/stats` require a valid token when one is configured.
 - **Input validation** - All request bodies are validated as JSON objects
 - **Request size limits** - Maximum request body size is 16 MiB
 - **Thread-safe** - All shared state is protected by locks
