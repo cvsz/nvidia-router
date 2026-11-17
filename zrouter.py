@@ -52,6 +52,7 @@ from __future__ import annotations
 import argparse
 import collections
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -294,10 +295,13 @@ def load_keys(
             for line in f:
                 raw += re.split(r"[,\s]+", line.split("#", 1)[0].strip())
 
-    # Load keys from provider.json
+    # Load keys from provider.json (preserving per-provider base URLs)
     providers_cfg = ProviderConfig(providers_file or PROVIDERS_PATH)
+    provider_info: dict[str, tuple[str, str]] = {}  # key -> (provider, base_url)
     for provider, base_url, key in providers_cfg.all_keys():
-        raw.append(key)
+        key = key.strip()
+        if key and key not in provider_info:
+            provider_info[key] = (provider, base_url or CFG.base_url)
         # Also check the provider's env_var for additional keys
         cfg = providers_cfg.get(provider)
         env_var = str(cfg["env_var"]) if cfg else ""
@@ -305,7 +309,24 @@ def load_keys(
             raw += re.split(r"[,\s]+", os.environ.get(env_var, ""))
 
     deduped = [k.strip() for k in raw if k.strip()]
-    return [Key(k) for k in dict.fromkeys(deduped)]
+    keys: list[Key] = []
+    seen: set[str] = set()
+    for k in deduped:
+        if k in seen:
+            continue
+        seen.add(k)
+        if k in provider_info:
+            prov, base = provider_info[k]
+            keys.append(Key(k, provider=prov, base_url=base))
+        else:
+            keys.append(Key(k))
+    # Include provider-only keys that were not already loaded from env / keys file
+    for k, (prov, base) in provider_info.items():
+        if k in seen:
+            continue
+        seen.add(k)
+        keys.append(Key(k, provider=prov, base_url=base))
+    return keys
 
 
 # --------------------------------------------------------------------------- stats
@@ -1116,7 +1137,11 @@ class FreeRouter:
         if use_cache and body.get("temperature") == 0 and not body.get("tools"):
             ck = hashlib.sha256(
                 json.dumps(
-                    [label, {k: v for k, v in body.items() if k != "model"}],
+                    [
+                        label,
+                        list(cands),
+                        {k: v for k, v in body.items() if k != "model"},
+                    ],
                     sort_keys=True,
                 ).encode()
             ).hexdigest()
@@ -1227,6 +1252,8 @@ class FreeRouter:
                 )
                 if r.status_code == 429:
                     key.bench(CFG.cooldown_429)
+                elif r.status_code in (401, 403):
+                    key.mark_dead()
                 res[m] = (r.status_code, round(time.time() - t0, 2))
             except requests.RequestException as e:
                 res[m] = (type(e).__name__, round(time.time() - t0, 2))
@@ -1308,12 +1335,18 @@ def make_handler(router: FreeRouter, token: str | None):
             )
 
         def _authed(self) -> bool:
-            if token and self.headers.get("Authorization", "") != f"Bearer {token}":
+            if not token:
+                return True
+            provided = self.headers.get("Authorization", "")
+            expected = f"Bearer {token}"
+            if not hmac.compare_digest(provided, expected):
                 self._err(401, "invalid router token")
                 return False
             return True
 
         def do_GET(self) -> None:
+            if not self._authed():
+                return
             if self.path == "/health":
                 return self._json(
                     200,
@@ -1325,8 +1358,6 @@ def make_handler(router: FreeRouter, token: str | None):
                         ],
                     },
                 )
-            if not self._authed():
-                return
             try:
                 if self.path.rstrip("/") == "/v1/models":
                     ids = (
@@ -1398,14 +1429,36 @@ def make_handler(router: FreeRouter, token: str | None):
                 self._err(404, "not found")
             except RouterError as e:
                 self._err(e.status, e.message)
-            except Exception as e:
+            except Exception as e:  # pragma: no cover – safety net
                 log.exception("unhandled")
-                self._err(500, str(e))
+                self._err(500, "internal server error")
 
     return H
 
 
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"}
+
+
+def _require_token_for_public_bind(host: str, token: str | None) -> None:
+    """Refuse to start an unauthenticated proxy on a non-loopback interface.
+
+    Binding to 0.0.0.0 (or any LAN/external address) without ROUTER_TOKEN exposes
+    the router and upstream keys to everyone on the network. Fail closed instead.
+    """
+    if token:
+        return
+    if host in _LOOPBACK_HOSTS:
+        return
+    log.error(
+        "ROUTER_TOKEN is required when binding to %s; refusing to start an "
+        "unauthenticated proxy on a non-loopback interface.",
+        host,
+    )
+    sys.exit(1)
+
+
 def serve(router: FreeRouter, host: str, port: int, token: str | None) -> None:
+    _require_token_for_public_bind(host, token)
     srv = ThreadingHTTPServer((host, port), make_handler(router, token))
     srv.daemon_threads = True
     log.warning(

@@ -18,6 +18,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import sys
@@ -86,8 +87,9 @@ def _authed() -> bool:
     """Return True if request carries valid Bearer token (or no token required)."""
     if not _token:
         return True
-    auth = request.headers.get("Authorization", "")
-    return auth == f"Bearer {_token}"
+    provided = request.headers.get("Authorization", "")
+    expected = f"Bearer {_token}"
+    return hmac.compare_digest(provided, expected)
 
 
 def _require_auth() -> Any:
@@ -108,7 +110,10 @@ def index() -> str:
 
 @app.get("/health")
 def health() -> Any:
-    """Health endpoint – returns key status as JSON."""
+    """Health endpoint – returns key status as JSON (authenticated)."""
+    err = _require_auth()
+    if err is not None:
+        return err
     try:
         r = _get_router()
         return jsonify(
@@ -208,9 +213,12 @@ def chat_completions() -> Any:
             resp, model, _key = r.open_chat_stream(body)
 
             def gen():
-                for line in resp.iter_lines():
-                    if line:
-                        yield line + b"\n\n"
+                try:
+                    for line in resp.iter_lines():
+                        if line:
+                            yield line + b"\n\n"
+                finally:
+                    resp.close()
 
             return Response(
                 stream_with_context(gen()),
@@ -236,7 +244,7 @@ def chat_completions() -> Any:
         return jsonify({"error": {"message": e.message, "code": e.status}}), e.status
     except Exception as exc:  # pragma: no cover – safety net
         log.exception("unhandled error in /v1/chat/completions")
-        return jsonify({"error": {"message": str(exc), "code": 500}}), 500
+        return jsonify({"error": {"message": "internal server error", "code": 500}}), 500
 
 
 @app.post("/v1/embeddings")
@@ -253,7 +261,7 @@ def embeddings() -> Any:
         return jsonify({"error": {"message": e.message, "code": e.status}}), e.status
     except Exception as exc:  # pragma: no cover
         log.exception("unhandled error in /v1/embeddings")
-        return jsonify({"error": {"message": str(exc), "code": 500}}), 500
+        return jsonify({"error": {"message": "internal server error", "code": 500}}), 500
 
 
 # --------------------------------------------------------------------------- #
@@ -273,6 +281,14 @@ def main() -> None:
     host = os.environ.get("WEB_HOST", "0.0.0.0")
     port = int(os.environ.get("WEB_PORT", "8000"))
     debug = os.environ.get("WEB_DEBUG", "0") == "1"
+    _loopback = {"127.0.0.1", "localhost", "::1"}
+    if not _token and host not in _loopback:
+        log.error(
+            "ROUTER_TOKEN is required when binding to %s; refusing to start an "
+            "unauthenticated web app on a non-loopback interface.",
+            host,
+        )
+        sys.exit(1)
     log.info("Starting zrouter-web on http://%s:%d/v1", host, port)
     app.run(host=host, port=port, debug=debug, threaded=True)
 

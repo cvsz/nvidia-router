@@ -15,7 +15,7 @@
 
 | Test File | Tests | Status |
 |-----------|-------|--------|
-| test_nvidia.py | 60 | All Passed |
+| test_zrouter.py | 60 | All Passed |
 
 ## Build Artifacts
 
@@ -25,7 +25,7 @@
 | GUI Executable | dist/gui/zcloud-gui | Built |
 | Production | dist/prod/nvidia-router | Built |
 | Enterprise | dist/ent/zcloud-enterprise | Built |
-| Web Package | dist/web/nvidia.py | Built |
+| Web Package | dist/web/zrouter.py | Built |
 | DEB Package | zrouter_1.0.0_amd64.deb | Built |
 | Windows .exe | dist/exe/win/nvidia-router.exe | Built (Linux ELF) |
 

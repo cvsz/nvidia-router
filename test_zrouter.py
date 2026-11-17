@@ -328,6 +328,33 @@ class TestLoadKeys(unittest.TestCase):
         keys = zrouter.load_keys(providers_file="/tmp/nonexistent_providers.json")
         self.assertEqual(keys, [])
 
+    def test_load_keys_preserves_provider_base_url(self):
+        path = os.path.join(os.path.dirname(__file__), "test_providers.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "providers": {
+                        "OpenRouter": {
+                            "api_keys": ["sk-or-key1"],
+                            "base_url": "https://openrouter.ai/api/v1",
+                            "env_var": "",
+                        }
+                    }
+                },
+                f,
+            )
+        try:
+            for var in ("NVIDIA_API_KEYS", "NVIDIA_API_KEY"):
+                os.environ.pop(var, None)
+            keys = zrouter.load_keys(providers_file=path)
+            self.assertEqual(len(keys), 1)
+            self.assertEqual(keys[0].value, "sk-or-key1")
+            self.assertEqual(keys[0].provider, "OpenRouter")
+            self.assertEqual(keys[0].base_url, "https://openrouter.ai/api/v1")
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
+
 
 class TestFreeRouterInit(unittest.TestCase):
     def test_no_keys_raises(self):
@@ -341,6 +368,47 @@ class TestFreeRouterInit(unittest.TestCase):
         r = FreeRouter(api_keys=["k1", "k2", "k1"])
         self.assertEqual(len(r.keys), 2)
         self.assertEqual(r.keys[0].value, "k1")
+
+
+class TestProbe(unittest.TestCase):
+    def setUp(self):
+        self.r = FreeRouter.__new__(FreeRouter)
+        self.r._local = threading.local()
+        self.r.keys = [Key("k1")]
+        self.r._available = ["gemma-3-27b"]
+        self.r._available_at = time.time()
+        self.r.available_ids = mock.Mock(return_value=self.r._available)
+        self.r.stats = None
+
+    def test_probe_marks_dead_on_401(self):
+        fake_resp = mock.Mock(status_code=401)
+        with (
+            mock.patch.object(self.r, "_key_order", return_value=self.r.keys),
+            mock.patch.object(self.r.s, "post", return_value=fake_resp),
+        ):
+            res = self.r.probe()
+        self.assertEqual(res["gemma-3-27b"][0], 401)
+        self.assertTrue(self.r.keys[0].dead)
+
+    def test_probe_marks_dead_on_403(self):
+        fake_resp = mock.Mock(status_code=403)
+        with (
+            mock.patch.object(self.r, "_key_order", return_value=self.r.keys),
+            mock.patch.object(self.r.s, "post", return_value=fake_resp),
+        ):
+            res = self.r.probe()
+        self.assertEqual(res["gemma-3-27b"][0], 403)
+        self.assertTrue(self.r.keys[0].dead)
+
+    def test_probe_benches_on_429(self):
+        fake_resp = mock.Mock(status_code=429)
+        with (
+            mock.patch.object(self.r, "_key_order", return_value=self.r.keys),
+            mock.patch.object(self.r.s, "post", return_value=fake_resp),
+        ):
+            res = self.r.probe()
+        self.assertEqual(res["gemma-3-27b"][0], 429)
+        self.assertFalse(self.r.keys[0].is_ready())
 
 
 class TestPlan(unittest.TestCase):

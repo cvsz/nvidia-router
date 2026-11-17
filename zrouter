@@ -8,7 +8,7 @@
 #   ./zcloud providers
 #   ./zcloud discover
 #
-# Auto-detects the virtual environment and delegates to nvidia.py.
+# Auto-detects the virtual environment and delegates to zrouter.py.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

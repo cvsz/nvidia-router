@@ -6,12 +6,17 @@ on:
   pull_request:
     branches: [ main, master ]
 
+permissions:
+  contents: read
+
 env:
   PYTHON_VERSION: "3.14"
 
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -49,6 +54,8 @@ jobs:
     needs: lint-and-test
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
