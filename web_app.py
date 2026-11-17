@@ -213,9 +213,12 @@ def chat_completions() -> Any:
             resp, model, _key = r.open_chat_stream(body)
 
             def gen():
-                for line in resp.iter_lines():
-                    if line:
-                        yield line + b"\n\n"
+                try:
+                    for line in resp.iter_lines():
+                        if line:
+                            yield line + b"\n\n"
+                finally:
+                    resp.close()
 
             return Response(
                 stream_with_context(gen()),
