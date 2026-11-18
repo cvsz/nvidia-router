@@ -8,14 +8,11 @@ from enum import Enum
 from typing import Any
 
 
-
-
 class ApprovalStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
     DENIED = "denied"
     EXPIRED = "expired"
-
 
 
 class BotStatus(str, Enum):
@@ -26,9 +23,7 @@ class BotStatus(str, Enum):
     ERROR = "error"
 
 @dataclass
-
-
-class ApprovalCard:
+ApprovalCard:
     id: str
     action: str
     details: str
@@ -55,9 +50,7 @@ class ApprovalCard:
         )
 
 @dataclass
-
-
-class VaultEntry:
+VaultEntry:
     id: str
     name: str
     kind: str  # login, card, contact, secret
@@ -80,9 +73,7 @@ class VaultEntry:
         )
 
 @dataclass
-
-
-class BotMemory:
+BotMemory:
     key: str
     value: Any
     updated_at: float = field(default_factory=time.time)
@@ -102,9 +93,7 @@ class BotMemory:
 # --------------------------------------------------------------------------- #
 
 @dataclass
-
-
-class VoiceSettings:
+VoiceSettings:
     """Voice settings for a bot (x.ai voice menu: speed slider, voice selection)."""
 
     voice_id: str = "default"
@@ -126,9 +115,7 @@ class VoiceSettings:
         )
 
 @dataclass
-
-
-class SharedConnector:
+SharedConnector:
     """A connector shared between bots (x.ai: shared connector, Allow Shared Logins)."""
 
     id: str
@@ -151,9 +138,7 @@ class SharedConnector:
         )
 
 @dataclass
-
-
-class ReviewLearning:
+ReviewLearning:
     """A learning item that a teammate taught, waiting for owner/Manager approval."""
 
     id: str
@@ -182,7 +167,6 @@ class ReviewLearning:
         )
 
 
-
 class RoutineStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -191,9 +175,7 @@ class RoutineStatus(str, Enum):
     CANCELLED = "cancelled"
 
 @dataclass
-
-
-class Routine:
+Routine:
     """A scheduled routine that runs automatically on a cron-like schedule."""
 
     id: str
@@ -232,9 +214,7 @@ class Routine:
         )
 
 @dataclass
-
-
-class SkillTemplate:
+SkillTemplate:
     """A reusable skill template for bots."""
 
     id: str
@@ -263,9 +243,7 @@ class SkillTemplate:
         )
 
 @dataclass
-
-
-class Meeting:
+Meeting:
     """Represents a meeting that a bot can join."""
 
     id: str
@@ -294,9 +272,7 @@ class Meeting:
         )
 
 @dataclass
-
-
-class Page:
+Page:
     """A collaborative document/page (x.ai: Pages - reports, memos, dashboards)."""
 
     id: str
@@ -323,9 +299,7 @@ class Page:
         )
 
 @dataclass
-
-
-class CloudAgent:
+CloudAgent:
     """A cloud agent that runs background tasks (x.ai: cloud agents)."""
 
     id: str
@@ -356,9 +330,7 @@ class CloudAgent:
         )
 
 @dataclass
-
-
-class Email:
+Email:
     """Represents an email that a bot can forward."""
 
     id: str
@@ -387,9 +359,7 @@ class Email:
         )
 
 @dataclass
-
-
-class CalendarEvent:
+CalendarEvent:
     """Represents a calendar event."""
 
     id: str
@@ -418,9 +388,7 @@ class CalendarEvent:
         )
 
 @dataclass
-
-
-class MediaAsset:
+MediaAsset:
     """Represents a generated image or video."""
 
     id: str
@@ -447,9 +415,7 @@ class MediaAsset:
         )
 
 @dataclass
-
-
-class CartItem:
+CartItem:
     """An item in a shopping cart."""
 
     id: str
@@ -472,9 +438,7 @@ class CartItem:
         )
 
 @dataclass
-
-
-class ShoppingCart:
+ShoppingCart:
     """A shopping cart for a bot."""
 
     id: str
@@ -502,9 +466,7 @@ class ShoppingCart:
         )
 
 @dataclass
-
-
-class NetworkPeer:
+NetworkPeer:
     """A peer in a private network (Tailscale)."""
 
     id: str
