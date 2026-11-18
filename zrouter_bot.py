@@ -738,6 +738,7 @@ def get_bot(bot_id: str | None = None) -> Bot:
 def create_bot(name: str = "zrouter-bot", bot_id: str | None = None) -> Bot:
     return MANAGER.create(name=name, bot_id=bot_id)
 
+
 # --------------------------------------------------------------------------- #
 # Routine / Scheduler (x.ai: scheduled tasks, routines, cloud agents)
 # --------------------------------------------------------------------------- #
@@ -1643,6 +1644,7 @@ class MediaManager:
             del self._assets[asset_id]
             self._save()
             return True
+
 
 # --------------------------------------------------------------------------- #
 # Shopping Cart / Checkout (x.ai: shopping cards, checkout)
