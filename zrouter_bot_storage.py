@@ -24,6 +24,7 @@ if os.name == "posix":
 VAULT_FILE = BOT_HOME / "vault.json"
 MEMORY_FILE = BOT_HOME / "memory.json"
 
+
 class Vault:
     """Local JSON credential store; contents are plaintext and rely on file permissions."""
 
