@@ -22,7 +22,6 @@ import uuid
 from pathlib import Path
 from typing import Any, ClassVar
 
-from zrouter_bot_storage import BOT_HOME, MEMORY_FILE, VAULT_FILE, Memory, Vault
 from zrouter_bot_models import (
     ApprovalCard,
     ApprovalStatus,
@@ -44,6 +43,13 @@ from zrouter_bot_models import (
     SkillTemplate,
     VaultEntry,
     VoiceSettings,
+)
+from zrouter_bot_storage import (
+    BOT_HOME,
+    MEMORY_FILE as MEMORY_FILE,
+    Memory,
+    VAULT_FILE as VAULT_FILE,
+    Vault,
 )
 
 log = logging.getLogger("zrouter-bot")
