@@ -20,7 +20,7 @@ zrouter is a Python-first, local-first OpenAI-compatible model router. The NVIDI
 - Provider URLs must use HTTPS, except explicitly local loopback HTTP endpoints.
 - Do not add paid APIs, cloud resources, telemetry, or external runtime dependencies without explicit authorization.
 - Preserve existing CLI/API behavior unless the PR documents a deliberate compatibility change.
-- When extracting bot models, keep their original `zrouter_bot` names as re-exports; add regression tests before changing import paths.
+- When extracting bot models or storage services, keep their original `zrouter_bot` names as re-exports; add regression tests before changing import paths.
 
 ## Validation
 
