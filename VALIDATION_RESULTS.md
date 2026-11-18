@@ -37,7 +37,7 @@ Evidence for the refactor implementation is tied to the exact tested code commit
 
 ## Phase 2 — bot model extraction
 
-- Scope: extract bot enums and 18 serializable domain models from `zrouter_bot.py` into `zrouter_bot_models.py`.
+- Scope: extract 3 bot enums and 17 serializable domain models (20 public types) from `zrouter_bot.py` into `zrouter_bot_models.py`.
 - Compatibility: `zrouter_bot.py` re-exports the same names; no existing import path is intentionally removed.
 - Packaging: added the module to `pyproject.toml`, Docker runtime/web images, and Makefile lint/source bundle targets.
 - Regression coverage: added `test_zrouter_bot_models.py` for identity of compatibility re-exports and serialization round trips.
