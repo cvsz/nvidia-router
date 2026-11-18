@@ -35,15 +35,17 @@ Evidence for the refactor implementation is tied to the exact tested code commit
 - Model discovery does not prove pricing. New models remain `free=false` and `pricing_status=unverified` until explicitly curated.
 - Remote plaintext HTTP provider endpoints are rejected; only loopback HTTP is allowed.
 
-## Phase 2 — bot model extraction
+## Phase 2 — bot models and storage extraction
 
-- Scope: extract 3 bot enums and 17 serializable domain models (20 public types) from `zrouter_bot.py` into `zrouter_bot_models.py`.
-- Compatibility: `zrouter_bot.py` re-exports the same names; no existing import path is intentionally removed.
-- Packaging: added the module to `pyproject.toml`, Docker runtime/web images, and Makefile lint/source bundle targets.
-- Regression coverage: added `test_zrouter_bot_models.py` for identity of compatibility re-exports and serialization round trips.
-- Current implementation commit: `83d7da4fd121f7b0092606d27824d8ef96e9f4c8`.
-- CI for this commit: **PENDING**. Do not treat Phase 2 as validated until the matching CI run passes.
-- Local execution: not run in this session.
+- Scope: extract 3 bot enums and 17 serializable domain models (20 public types) into `zrouter_bot_models.py`.
+- Extract `Vault`, `Memory`, and bot-home storage paths into `zrouter_bot_storage.py`.
+- Compatibility: `zrouter_bot.py` re-exports the previous model names, storage classes, and path constants; existing imports remain supported.
+- Packaging: added both modules to `pyproject.toml`, Docker runtime/web images, Makefile lint/source bundle targets, and PyInstaller dependency discovery.
+- Regression coverage: tests verify all 20 model re-exports, model serialization round trips, storage class re-exports, and memory persistence.
+- Validated code commit: `13e366f338317837201d270bf212e30e59adf67d`.
+- [CI/CD run](https://github.com/cvsz/zrouter/actions/runs/44247416747): **PASS** — Ruff lint/format, **87 tests passed and 27 subtests passed**, Linux PyInstaller executable build, artifact upload.
+- [CodeQL run](https://github.com/cvsz/zrouter/actions/runs/44247416878): **PASS** — Python and GitHub Actions.
+- Local execution: not run in this session; validation was performed by GitHub Actions.
 
 ## Evidence policy
 
