@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 zrouter_bot.py — Bot framework for zrouter.
 
@@ -32,7 +31,9 @@ log = logging.getLogger("zrouter-bot")
 # --------------------------------------------------------------------------- #
 HOME = Path.home()
 BOT_HOME = HOME / ".zrouter_bot"
-BOT_HOME.mkdir(parents=True, exist_ok=True)
+BOT_HOME.mkdir(mode=0o700, parents=True, exist_ok=True)
+if os.name == "posix":
+    os.chmod(BOT_HOME, 0o700)
 
 VAULT_FILE = BOT_HOME / "vault.json"
 MEMORY_FILE = BOT_HOME / "memory.json"
@@ -132,7 +133,7 @@ class BotMemory:
 # Vault — credential storage
 # --------------------------------------------------------------------------- #
 class Vault:
-    """Encrypted-on-disk credential vault for bot logins/cards/contacts."""
+    """Local JSON credential store; contents are plaintext and rely on file permissions."""
 
     def __init__(self, path: Path = VAULT_FILE) -> None:
         self.path = path
@@ -141,22 +142,53 @@ class Vault:
         self._load()
 
     def _load(self) -> None:
+        if self.path.is_symlink():
+            raise RuntimeError("refusing to read a symlinked vault file")
         if not self.path.exists():
             self._entries = {}
             return
         try:
+            if os.name == "posix":
+                os.chmod(self.path, 0o600)
             with self.path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
-            self._entries = {e["id"]: VaultEntry.from_dict(e) for e in data}
-        except (OSError, ValueError, KeyError):
-            log.exception("Failed to load vault; starting empty")
-            self._entries = {}
+            if not isinstance(data, list):
+                raise TypeError("vault root must be a JSON array")
+            self._entries = {entry["id"]: VaultEntry.from_dict(entry) for entry in data}
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            log.exception("Vault could not be loaded; refusing to overwrite it")
+            raise RuntimeError(
+                "vault file is unreadable or corrupt; refusing to start with an empty vault"
+            ) from exc
 
     def _save(self) -> None:
-        tmp = self.path.with_suffix(".tmp")
-        with tmp.open("w", encoding="utf-8") as f:
-            json.dump([e.to_dict() for e in self._entries.values()], f, indent=2)
-        os.replace(tmp, self.path)
+        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if os.name == "posix":
+            os.chmod(self.path.parent, 0o700)
+        tmp = self.path.with_name(f".{self.path.name}.{uuid.uuid4().hex}.tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(
+                    [entry.to_dict() for entry in self._entries.values()],
+                    f,
+                    indent=2,
+                )
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, self.path)
+            if os.name == "posix":
+                os.chmod(self.path, 0o600)
+        except Exception:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            try:
+                tmp.unlink()
+            except FileNotFoundError:
+                pass
+            raise
 
     def list(self) -> list[VaultEntry]:
         with self._lock:

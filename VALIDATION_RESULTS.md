@@ -1,56 +1,32 @@
-# Validation Results - NVIDIA Free-Model Router v1.0.0
+# Validation Results
 
-## Test Results
+This file records evidence for a specific commit. It is not a permanent release attestation.
 
-| Test Category | Status | Count |
-|---------------|--------|-------|
-| Unit Tests | ✅ PASSED | 60/60 |
-| Lint Check (ruff) | ✅ PASSED | 0 errors |
-| Format Check (ruff format) | ✅ PASSED | 0 issues |
-| Build (PyInstaller) | ✅ PASSED | All targets built |
-| Docker Build | ✅ PASSED | nvidia-router:latest |
-| DEB Package | ✅ Built | zrouter_1.0.0_amd64.deb |
+## Current refactor branch
 
-## Test Coverage
+- Base: `main`
+- Branch: `refactor/openmausbot-router-architecture`
+- Validation status: **PENDING CI**
+- Local test execution: **NOT RUN** (changes were authored through the GitHub repository API; no local checkout/runtime was available in this session)
+- Runtime integration: **NOT VERIFIED**
+- Docker/package builds: **NOT VERIFIED**
 
-| Test File | Tests | Status |
-|-----------|-------|--------|
-| test_zrouter.py | 60 | All Passed |
+The pull request's GitHub Actions results are the authoritative validation evidence for this change. Update this file only after inspecting the exact workflow run and commit SHA.
 
-## Build Artifacts
+## Required gates
 
-| Artifact | Path | Status |
-|----------|------|--------|
-| Native CLI | dist/exe/nvidia-router | Built |
-| GUI Executable | dist/gui/zcloud-gui | Built |
-| Production | dist/prod/nvidia-router | Built |
-| Enterprise | dist/ent/zcloud-enterprise | Built |
-| Web Package | dist/web/zrouter.py | Built |
-| DEB Package | zrouter_1.0.0_amd64.deb | Built |
-| Windows .exe | dist/exe/win/nvidia-router.exe | Built (Linux ELF) |
+| Gate | Required evidence | Status |
+|---|---|---|
+| Unit tests | Full pytest suite, including provider registry and routing fail-closed tests | Pending |
+| Lint | Ruff check | Pending |
+| Format | Ruff format check | Pending |
+| Build | Python package / CLI build | Pending |
+| Security | CodeQL or equivalent scan; manual review of auth, provider URL validation, model allowlist | Pending |
+| Runtime | Loopback and authenticated non-loopback smoke tests; streaming disconnect test | Pending |
+| Compatibility | CLI, OpenAI-compatible API, GUI/TUI imports, provider config compatibility | Pending |
 
-## Security Status
+## Evidence policy
 
-| Check | Status |
-|-------|--------|
-| API keys in code | ✅ None |
-| provider.json secrets | ✅ All empty |
-| Docker image | ✅ No secrets embedded |
-| Lint warnings | 0 |
-| Format issues | 0 |
-
-## GitHub Actions Workflows
-
-| Workflow | Status |
-|----------|--------|
-| ci-cd.yml | Lint + Test + Build |
-| build-windows.yml | Windows .exe builder |
-
-## Git Status
-
-| Metric | Value |
-|--------|-------|
-| Commits | Multiple |
-| Branches | main, feature/complete-router-v1.0.0 |
-| PRs | #1 Merged |
-| Open Issues | 0 |
+- Record the exact commit SHA and workflow run URL.
+- Distinguish passed, failed, skipped, blocked, and not-run checks.
+- Do not claim a coverage percentage or production readiness without current machine-generated evidence.

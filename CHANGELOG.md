@@ -5,6 +5,21 @@ All notable changes to zrouter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+- Fail closed when live model discovery cannot match an explicitly configured route allowlist; no fallback to arbitrary live models.
+- Do not infer a model's free/paid status from its name or route classification.
+- Require exact model IDs or explicit glob patterns for route matching.
+- Validate provider base URLs and reject non-loopback plaintext HTTP, embedded credentials, query strings, and fragments.
+
+### Changed
+- Introduce a dedicated provider registry module while preserving the existing ProviderConfig compatibility surface.
+- Validate provider metadata before it is accepted by the router.
+- Expand the test target to discover all test modules and include provider-registry checks.
+- Correct the CI Make invocation and reduce the unit-test job token to read-only permissions.
+- Add CodeQL analysis for Python and GitHub Actions on main-branch pushes and pull requests.
+
 ## [1.0.0] - 2026-11-15
 
 ### Added
