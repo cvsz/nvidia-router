@@ -43,7 +43,8 @@ CLI / GUI / TUI / Web Dashboard / OpenAI clients
 
 - `zrouter.py`: compatibility facade, CLI, router application, request/response contracts.
 - `zrouter_core.py`: provider definitions, registry, and endpoint validation.
-- `zrouter_bot.py`: bot state, approvals, memory, vault, file and routine utilities.
+- `zrouter_bot_models.py`: bot enums and serializable domain models; this is the canonical definition module.
+- `zrouter_bot.py`: bot services, managers, storage and compatibility re-exports of all pre-existing model names. Existing `from zrouter_bot import ...` imports remain supported.
 - `web_app.py`: Flask web adapter; delegates inference to `FreeRouter`.
 - `models.json`: curated model metadata. `free: true` is an explicit curation decision, not a value inferred from model names.
 
