@@ -1,32 +1,40 @@
 # Validation Results
 
-This file records evidence for a specific commit. It is not a permanent release attestation.
+Evidence for the refactor implementation is tied to the exact tested code commit.
 
-## Current refactor branch
+## Refactor implementation
 
-- Base: `main`
-- Branch: `refactor/openmausbot-router-architecture`
-- Validation status: **PENDING CI**
-- Local test execution: **NOT RUN** (changes were authored through the GitHub repository API; no local checkout/runtime was available in this session)
-- Runtime integration: **NOT VERIFIED**
-- Docker/package builds: **NOT VERIFIED**
+- Base branch: `main`
+- Feature branch: `refactor/openmausbot-router-architecture`
+- Validated code commit: `9df4fc92ab3d7fb46da066dd49c80120ba68fc40`
+- Environment: GitHub-hosted Ubuntu runner, Python 3.14.10
+- Local execution: **NOT RUN**; validation was performed by GitHub Actions.
 
-The pull request's GitHub Actions results are the authoritative validation evidence for this change. Update this file only after inspecting the exact workflow run and commit SHA.
+## Automated results
 
-## Required gates
-
-| Gate | Required evidence | Status |
+| Gate | Result | Evidence |
 |---|---|---|
-| Unit tests | Full pytest suite, including provider registry and routing fail-closed tests | Pending |
-| Lint | Ruff check | Pending |
-| Format | Ruff format check | Pending |
-| Build | Python package / CLI build | Pending |
-| Security | CodeQL or equivalent scan; manual review of auth, provider URL validation, model allowlist | Pending |
-| Runtime | Loopback and authenticated non-loopback smoke tests; streaming disconnect test | Pending |
-| Compatibility | CLI, OpenAI-compatible API, GUI/TUI imports, provider config compatibility | Pending |
+| Ruff lint | **PASS** | [CI/CD run](https://github.com/cvsz/zrouter/actions/runs/44236819938) |
+| Ruff format | **PASS** | [CI/CD run](https://github.com/cvsz/zrouter/actions/runs/44236819938) |
+| Pytest | **PASS — 82 tests, 7 subtests** | [CI/CD run](https://github.com/cvsz/zrouter/actions/runs/44236819938) |
+| PyInstaller Linux CLI | **PASS** | [Build artifact run](https://github.com/cvsz/zrouter/actions/runs/44236819938) |
+| CodeQL: Python + GitHub Actions | **PASS** | [CodeQL run](https://github.com/cvsz/zrouter/actions/runs/44236819945) |
+| Release job | **SKIPPED intentionally** | No release authorization was requested |
+
+## Not verified
+
+- Docker image build and runtime smoke test
+- Windows executable build
+- Live NVIDIA NIM requests, provider failover against real upstreams, and end-to-end streaming cancellation
+- GUI/TUI runtime behavior on desktop platforms
+- Production deployment, load testing, and external provider pricing verification
+
+## Security limitations
+
+- The bot vault remains plaintext JSON. POSIX permissions are restricted to directory `0700` and file `0600`; this does not provide encryption or protect against the same OS user, root, or compromised processes.
+- Model discovery does not prove pricing. New models remain `free=false` and `pricing_status=unverified` until explicitly curated.
+- Remote plaintext HTTP provider endpoints are rejected; only loopback HTTP is allowed.
 
 ## Evidence policy
 
-- Record the exact commit SHA and workflow run URL.
-- Distinguish passed, failed, skipped, blocked, and not-run checks.
-- Do not claim a coverage percentage or production readiness without current machine-generated evidence.
+The automated results above apply to the validated code commit listed above. Any later code change requires a new validation run. Documentation-only updates do not change the tested runtime code.

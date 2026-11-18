@@ -163,7 +163,7 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) สำหรับรายละเอ
 | SEC-004 | Dead key drop (401/403) | ✅ FIXED |
 | SEC-005 | Input validation | ✅ FIXED |
 | SEC-006 | Proxy token auth (ROUTER_TOKEN) | Implemented |
-| SEC-007 | Bot vault encryption at rest | Known limitation — plaintext JSON; do not store production credentials |
+| SEC-007 | Bot vault encryption at rest | Plaintext JSON; POSIX file/directory permissions are 0600/0700; not encrypted |
 
 See [`SECURITY.md`](SECURITY.md) สำหรับรายละเอียด
 

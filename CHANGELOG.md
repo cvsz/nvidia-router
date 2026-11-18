@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Expand the test target to discover all test modules and include provider-registry checks.
 - Correct the CI Make invocation and reduce the unit-test job token to read-only permissions.
 - Add CodeQL analysis for Python and GitHub Actions on main-branch pushes and pull requests.
+- Restrict POSIX bot-vault directory/file permissions to 0700/0600, use atomic writes, reject symlinks, and fail closed on corrupted vault data; encryption remains a documented limitation.
 
 ## [1.0.0] - 2026-11-15
 
