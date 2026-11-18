@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import zrouter_bot_storage as _storage
-
 from zrouter_bot_models import (
     ApprovalCard,
     ApprovalStatus,
