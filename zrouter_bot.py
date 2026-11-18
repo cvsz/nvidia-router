@@ -743,8 +743,6 @@ def create_bot(name: str = "zrouter-bot", bot_id: str | None = None) -> Bot:
 # --------------------------------------------------------------------------- #
 
 
-
-
 class RoutineScheduler:
     """Manages scheduled routines for bots."""
 
@@ -1649,8 +1647,6 @@ class MediaManager:
 # --------------------------------------------------------------------------- #
 # Shopping Cart / Checkout (x.ai: shopping cards, checkout)
 # --------------------------------------------------------------------------- #
-
-
 
 
 class CartManager:
