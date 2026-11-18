@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Extract 3 bot enums and 17 serializable domain models into `zrouter_bot_models.py`; keep their original `zrouter_bot` import paths as compatibility re-exports.
 - Extract `Vault`, `Memory`, and bot-home storage paths into `zrouter_bot_storage.py`; preserve the original `zrouter_bot` import surface.
+- Extract `RateLimiter`, `Stats`, `TTLCache`, and `mask` into `zrouter_runtime.py`; preserve their original `zrouter` import paths.
 - Include the extracted module in Python packaging, Docker images, Makefile source bundles, lint, and regression tests.
 - Introduce a dedicated provider registry module while preserving the existing ProviderConfig compatibility surface.
 - Validate provider metadata before it is accepted by the router.
