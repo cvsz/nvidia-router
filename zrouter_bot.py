@@ -69,12 +69,6 @@ MAX_FILE_BYTES = 250 * 1024 * 1024  # 250 MB (matches Grok Bot)
 # --------------------------------------------------------------------------- #
 
 
-
-
-
-
-
-
 class Vault:
     """Local JSON credential store; contents are plaintext and rely on file permissions."""
 
@@ -743,7 +737,6 @@ def get_bot(bot_id: str | None = None) -> Bot:
 
 def create_bot(name: str = "zrouter-bot", bot_id: str | None = None) -> Bot:
     return MANAGER.create(name=name, bot_id=bot_id)
-
 
 # --------------------------------------------------------------------------- #
 # Routine / Scheduler (x.ai: scheduled tasks, routines, cloud agents)
@@ -1652,7 +1645,6 @@ class MediaManager:
             del self._assets[asset_id]
             self._save()
             return True
-
 
 # --------------------------------------------------------------------------- #
 # Shopping Cart / Checkout (x.ai: shopping cards, checkout)
