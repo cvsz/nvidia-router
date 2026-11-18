@@ -156,12 +156,12 @@ serve: ## Run the OpenAI-compatible proxy on :8000 (set keys + token first)
 
 lint: ## Run ruff check and ruff format --check
 	@echo "==> Linting with ruff"
-	$(VENV_PYTHON) -m ruff check zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py test_zrouter.py test_zrouter_core.py test_zrouter_bot.py test_zrouter_bot_models.py zrouter_bot_models.py zrouter-gui.py zrouter-tui.py
-	$(VENV_PYTHON) -m ruff format --check zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py test_zrouter.py test_zrouter_core.py test_zrouter_bot.py test_zrouter_bot_models.py zrouter_bot_models.py zrouter-gui.py zrouter-tui.py
+	$(VENV_PYTHON) -m ruff check zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py test_zrouter.py test_zrouter_core.py test_zrouter_bot.py test_zrouter_bot_models.py zrouter-gui.py zrouter-tui.py
+	$(VENV_PYTHON) -m ruff format --check zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py test_zrouter.py test_zrouter_core.py test_zrouter_bot.py test_zrouter_bot_models.py zrouter-gui.py zrouter-tui.py
 
 format: ## Format code with ruff
 	@echo "==> Formatting with ruff"
-	$(VENV_PYTHON) -m ruff format zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py test_zrouter.py test_zrouter_core.py test_zrouter_bot.py test_zrouter_bot_models.py zrouter_bot_models.py zrouter-gui.py
+	$(VENV_PYTHON) -m ruff format zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py test_zrouter.py test_zrouter_core.py test_zrouter_bot.py test_zrouter_bot_models.py zrouter-gui.py
 
 clean: ## Remove virtualenv, build artifacts, dist, and Python caches
 	@echo "==> Cleaning"
@@ -354,7 +354,7 @@ build\:deploy: setup lint test ## Full deploy: build web package + start server 
 build\:desktops: setup lint test ## Build desktop application packages (.desktop files)
 	@echo "==> Building desktop application packages"
 	@mkdir -p $(DIST)/desktops
-	$(VENV_PYTHON) -m py_compile zrouter.py zrouter_bot_models.py test_zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py zrouter-gui.py
+	$(VENV_PYTHON) -m py_compile zrouter.py zrouter_bot_models.py test_zrouter.py zrouter_core.py zrouter_bot.py zrouter-gui.py
 	cp nvidia.ico nvidia.png make_icon.py zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py zrouter-gui.py models.json zrouter $(DIST)/desktops/
 	chmod +x $(DIST)/desktops/zrouter
 	@printf '[Desktop Entry]\nName=zrouter\nComment=NVIDIA Free-Model Router\nExec=zrouter %%f\nIcon=zrouter\nTerminal=false\nType=Application\nCategories=Network;Chat;\n' > $(DIST)/desktops/zrouter.desktop
@@ -364,7 +364,7 @@ build\:desktops: setup lint test ## Build desktop application packages (.desktop
 build\:dev: setup lint test ## Development build with dev tools
 	@echo "==> Building development variant"
 	$(VENV_PIP) install --upgrade pytest ruff
-	$(VENV_PYTHON) -m py_compile zrouter.py zrouter_bot_models.py test_zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py zrouter-gui.py
+	$(VENV_PYTHON) -m py_compile zrouter.py zrouter_bot_models.py test_zrouter.py zrouter_core.py zrouter_bot.py zrouter-gui.py
 	@mkdir -p $(DIST)/dev
 	cp nvidia.ico nvidia.png make_icon.py zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py zrouter-gui.py test_zrouter.py models.json zrouter $(DIST)/dev/
 	chmod +x $(DIST)/dev/zrouter
@@ -413,7 +413,7 @@ build\:ent: setup lint test ## Enterprise build with all features
 build\:android: setup lint test ## Build Android package (requires Buildozer)
 	@echo "==> Building Android package"
 	@mkdir -p $(DIST)/android
-	$(VENV_PYTHON) -m py_compile zrouter.py zrouter_bot_models.py test_zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py zrouter-gui.py
+	$(VENV_PYTHON) -m py_compile zrouter.py zrouter_bot_models.py test_zrouter.py zrouter_core.py zrouter_bot.py zrouter-gui.py
 	cp nvidia.ico nvidia.png make_icon.py zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py zrouter-gui.py models.json zrouter $(DIST)/android/
 	chmod +x $(DIST)/android/zrouter
 	@printf '[app]\ntitle = zrouter\npackage.name = zrouter\npackage.domain = com.nvidia.router\nsource.dir = .\nsource.include_exts = py,png,jpg,kv,atlas\nversion = 1.0\nrequirements = python3,kivy,requests\nosx.python_version = 3\nosx.kivy_version = 2.1.0\nandroid.archs = arm64-v8a\nandroid.api = 31\nandroid.minapi = 24\n' > $(DIST)/android/buildozer.spec
@@ -423,7 +423,7 @@ build\:android: setup lint test ## Build Android package (requires Buildozer)
 build\:ios: setup lint test ## Build iOS package (requires BeeWare/Kivy, macOS only)
 	@echo "==> Building iOS package"
 	@mkdir -p $(DIST)/ios
-	$(VENV_PYTHON) -m py_compile zrouter.py zrouter_bot_models.py test_zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py zrouter-gui.py
+	$(VENV_PYTHON) -m py_compile zrouter.py zrouter_bot_models.py test_zrouter.py zrouter_core.py zrouter_bot.py zrouter-gui.py
 	cp nvidia.ico nvidia.png make_icon.py zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py zrouter-gui.py models.json zrouter $(DIST)/ios/
 	chmod +x $(DIST)/ios/zrouter
 	@printf '// swift-tools-version:5.5\nimport PackageDescription\n\nlet package = Package(\n    name: "zrouter",\n    platforms: [.iOS(.v15)],\n    products: [\n        .executable(name: "zrouter", targets: ["zrouter"])\n    ],\n    targets: [\n        .executableTarget(\n            name: "zrouter",\n            dependencies: [],\n            path: "."\n        )\n    ]\n)\n' > $(DIST)/ios/Package.swift
