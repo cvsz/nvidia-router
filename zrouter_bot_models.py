@@ -7,11 +7,16 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
 
+
+
+
 class ApprovalStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
     DENIED = "denied"
     EXPIRED = "expired"
+
+
 
 class BotStatus(str, Enum):
     IDLE = "idle"
@@ -21,6 +26,8 @@ class BotStatus(str, Enum):
     ERROR = "error"
 
 @dataclass
+
+
 class ApprovalCard:
     id: str
     action: str
@@ -48,6 +55,8 @@ class ApprovalCard:
         )
 
 @dataclass
+
+
 class VaultEntry:
     id: str
     name: str
@@ -71,6 +80,8 @@ class VaultEntry:
         )
 
 @dataclass
+
+
 class BotMemory:
     key: str
     value: Any
@@ -91,6 +102,8 @@ class BotMemory:
 # --------------------------------------------------------------------------- #
 
 @dataclass
+
+
 class VoiceSettings:
     """Voice settings for a bot (x.ai voice menu: speed slider, voice selection)."""
 
@@ -113,6 +126,8 @@ class VoiceSettings:
         )
 
 @dataclass
+
+
 class SharedConnector:
     """A connector shared between bots (x.ai: shared connector, Allow Shared Logins)."""
 
@@ -136,6 +151,8 @@ class SharedConnector:
         )
 
 @dataclass
+
+
 class ReviewLearning:
     """A learning item that a teammate taught, waiting for owner/Manager approval."""
 
@@ -164,6 +181,8 @@ class ReviewLearning:
             reviewed_by=d.get("reviewed_by"),
         )
 
+
+
 class RoutineStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -172,6 +191,8 @@ class RoutineStatus(str, Enum):
     CANCELLED = "cancelled"
 
 @dataclass
+
+
 class Routine:
     """A scheduled routine that runs automatically on a cron-like schedule."""
 
@@ -211,6 +232,8 @@ class Routine:
         )
 
 @dataclass
+
+
 class SkillTemplate:
     """A reusable skill template for bots."""
 
@@ -240,6 +263,8 @@ class SkillTemplate:
         )
 
 @dataclass
+
+
 class Meeting:
     """Represents a meeting that a bot can join."""
 
@@ -269,6 +294,8 @@ class Meeting:
         )
 
 @dataclass
+
+
 class Page:
     """A collaborative document/page (x.ai: Pages - reports, memos, dashboards)."""
 
@@ -296,6 +323,8 @@ class Page:
         )
 
 @dataclass
+
+
 class CloudAgent:
     """A cloud agent that runs background tasks (x.ai: cloud agents)."""
 
@@ -327,6 +356,8 @@ class CloudAgent:
         )
 
 @dataclass
+
+
 class Email:
     """Represents an email that a bot can forward."""
 
@@ -356,6 +387,8 @@ class Email:
         )
 
 @dataclass
+
+
 class CalendarEvent:
     """Represents a calendar event."""
 
@@ -385,6 +418,8 @@ class CalendarEvent:
         )
 
 @dataclass
+
+
 class MediaAsset:
     """Represents a generated image or video."""
 
@@ -412,6 +447,8 @@ class MediaAsset:
         )
 
 @dataclass
+
+
 class CartItem:
     """An item in a shopping cart."""
 
@@ -435,6 +472,8 @@ class CartItem:
         )
 
 @dataclass
+
+
 class ShoppingCart:
     """A shopping cart for a bot."""
 
@@ -463,6 +502,8 @@ class ShoppingCart:
         )
 
 @dataclass
+
+
 class NetworkPeer:
     """A peer in a private network (Tailscale)."""
 
