@@ -40,7 +40,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN groupadd -r appuser && useradd -r -g appuser -s /bin/false appuser
 
 # Copy application files (NOT provider.json — keys must come from env)
-COPY --chown=appuser:appuser zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py models.json ./
+COPY --chown=appuser:appuser zrouter.py zrouter_core.py zrouter_bot.py zrouter_bot_models.py zrouter_bot_storage.py models.json ./
 
 # Create data directory
 RUN mkdir -p /app/data /app/logs && chown appuser:appuser /app/data /app/logs
