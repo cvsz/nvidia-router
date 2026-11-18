@@ -102,6 +102,8 @@ zrouter ไม่ต้องการฐานข้อมูลภายนอ
 
 ### 🏗️ Architecture
 
+Bot domain models are defined in `zrouter_bot_models.py`; `zrouter_bot.py` re-exports the established model names to preserve existing imports. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for module boundaries.
+
 <p align="center">
   <img src="static/img/nvidia.png" alt="NVIDIA" width="64" height="64" />
 </p>
