@@ -44,14 +44,14 @@ from zrouter_bot_models import (
     VaultEntry,
     VoiceSettings,
 )
-from zrouter_bot_storage import (
-    BOT_HOME,
-    HOME as HOME,
-    MEMORY_FILE as MEMORY_FILE,
-    Memory,
-    VAULT_FILE as VAULT_FILE,
-    Vault,
-)
+import zrouter_bot_storage as _storage
+
+BOT_HOME = _storage.BOT_HOME
+HOME = _storage.HOME
+MEMORY_FILE = _storage.MEMORY_FILE
+VAULT_FILE = _storage.VAULT_FILE
+Memory = _storage.Memory
+Vault = _storage.Vault
 
 log = logging.getLogger("zrouter-bot")
 
