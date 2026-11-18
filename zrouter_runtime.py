@@ -13,6 +13,7 @@ from typing import Any
 log = logging.getLogger("nvrouter")
 STATS_DIRTY_THRESHOLD = 20
 
+
 def mask(key: str) -> str:
     """Return a masked representation of an API key for logging / display."""
     if not key:
@@ -20,6 +21,7 @@ def mask(key: str) -> str:
     if len(key) <= 16:
         return "***"
     return key[:9] + "..." + key[-4:]
+
 
 class RateLimiter:
     """Per-key token-bucket style rate limiter (requests per minute)."""
@@ -35,6 +37,7 @@ class RateLimiter:
             if delay > 0:
                 time.sleep(delay)
             self.last = time.monotonic()
+
 
 class Stats:
     """Per-model / per-key counters, persisted atomically as JSON."""
@@ -94,6 +97,7 @@ class Stats:
     def snapshot(self) -> dict[str, Any]:
         with self.lock:
             return json.loads(json.dumps(self.data))
+
 
 class TTLCache:
     """Thread-safe TTL + LRU cache with bounded size."""
