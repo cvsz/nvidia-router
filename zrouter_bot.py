@@ -46,6 +46,7 @@ from zrouter_bot_models import (
 )
 from zrouter_bot_storage import (
     BOT_HOME,
+    HOME as HOME,
     MEMORY_FILE as MEMORY_FILE,
     Memory,
     VAULT_FILE as VAULT_FILE,
@@ -64,10 +65,6 @@ MAX_FILE_BYTES = 250 * 1024 * 1024  # 250 MB (matches Grok Bot)
 
 
 # --------------------------------------------------------------------------- #
-# Enums / data classes
-# --------------------------------------------------------------------------- #
-
-
 # Approval / Auto-review
 # --------------------------------------------------------------------------- #
 class ApprovalEngine:
