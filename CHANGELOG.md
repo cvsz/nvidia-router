@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Validate provider base URLs and reject non-loopback plaintext HTTP, embedded credentials, query strings, and fragments.
 
 ### Changed
+- Extract 20 bot enums/domain models into `zrouter_bot_models.py`; keep their original `zrouter_bot` import paths as compatibility re-exports.
+- Include the extracted module in Python packaging, Docker images, Makefile source bundles, lint, and regression tests.
 - Introduce a dedicated provider registry module while preserving the existing ProviderConfig compatibility surface.
 - Validate provider metadata before it is accepted by the router.
 - Expand the test target to discover all test modules and include provider-registry checks.
