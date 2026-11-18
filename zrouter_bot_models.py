@@ -22,8 +22,9 @@ class BotStatus(str, Enum):
     WAITING_APPROVAL = "waiting_approval"
     ERROR = "error"
 
+
 @dataclass
-ApprovalCard:
+class ApprovalCard:
     id: str
     action: str
     details: str
@@ -49,8 +50,9 @@ ApprovalCard:
             decided_by=d.get("decided_by"),
         )
 
+
 @dataclass
-VaultEntry:
+class VaultEntry:
     id: str
     name: str
     kind: str  # login, card, contact, secret
@@ -72,8 +74,9 @@ VaultEntry:
             updated_at=d.get("updated_at", time.time()),
         )
 
+
 @dataclass
-BotMemory:
+class BotMemory:
     key: str
     value: Any
     updated_at: float = field(default_factory=time.time)
@@ -92,8 +95,9 @@ BotMemory:
 # Vault — credential storage
 # --------------------------------------------------------------------------- #
 
+
 @dataclass
-VoiceSettings:
+class VoiceSettings:
     """Voice settings for a bot (x.ai voice menu: speed slider, voice selection)."""
 
     voice_id: str = "default"
@@ -114,8 +118,9 @@ VoiceSettings:
             language=d.get("language", "en"),
         )
 
+
 @dataclass
-SharedConnector:
+class SharedConnector:
     """A connector shared between bots (x.ai: shared connector, Allow Shared Logins)."""
 
     id: str
@@ -137,8 +142,9 @@ SharedConnector:
             created_at=d.get("created_at", time.time()),
         )
 
+
 @dataclass
-ReviewLearning:
+class ReviewLearning:
     """A learning item that a teammate taught, waiting for owner/Manager approval."""
 
     id: str
@@ -174,8 +180,9 @@ class RoutineStatus(str, Enum):
     FAILED = "failed"
     CANCELLED = "cancelled"
 
+
 @dataclass
-Routine:
+class Routine:
     """A scheduled routine that runs automatically on a cron-like schedule."""
 
     id: str
@@ -213,8 +220,9 @@ Routine:
             error_message=d.get("error_message"),
         )
 
+
 @dataclass
-SkillTemplate:
+class SkillTemplate:
     """A reusable skill template for bots."""
 
     id: str
@@ -242,8 +250,9 @@ SkillTemplate:
             usage_count=d.get("usage_count", 0),
         )
 
+
 @dataclass
-Meeting:
+class Meeting:
     """Represents a meeting that a bot can join."""
 
     id: str
@@ -271,8 +280,9 @@ Meeting:
             summary=d.get("summary"),
         )
 
+
 @dataclass
-Page:
+class Page:
     """A collaborative document/page (x.ai: Pages - reports, memos, dashboards)."""
 
     id: str
@@ -298,8 +308,9 @@ Page:
             updated_at=d.get("updated_at", time.time()),
         )
 
+
 @dataclass
-CloudAgent:
+class CloudAgent:
     """A cloud agent that runs background tasks (x.ai: cloud agents)."""
 
     id: str
@@ -329,8 +340,9 @@ CloudAgent:
             completed_at=d.get("completed_at"),
         )
 
+
 @dataclass
-Email:
+class Email:
     """Represents an email that a bot can forward."""
 
     id: str
@@ -358,8 +370,9 @@ Email:
             sent_at=d.get("sent_at"),
         )
 
+
 @dataclass
-CalendarEvent:
+class CalendarEvent:
     """Represents a calendar event."""
 
     id: str
@@ -387,8 +400,9 @@ CalendarEvent:
             created_at=d.get("created_at", time.time()),
         )
 
+
 @dataclass
-MediaAsset:
+class MediaAsset:
     """Represents a generated image or video."""
 
     id: str
@@ -414,8 +428,9 @@ MediaAsset:
             created_at=d.get("created_at", time.time()),
         )
 
+
 @dataclass
-CartItem:
+class CartItem:
     """An item in a shopping cart."""
 
     id: str
@@ -437,8 +452,9 @@ CartItem:
             url=d["url"],
         )
 
+
 @dataclass
-ShoppingCart:
+class ShoppingCart:
     """A shopping cart for a bot."""
 
     id: str
@@ -465,8 +481,9 @@ ShoppingCart:
             checked_out_at=d.get("checked_out_at"),
         )
 
+
 @dataclass
-NetworkPeer:
+class NetworkPeer:
     """A peer in a private network (Tailscale)."""
 
     id: str
