@@ -43,6 +43,7 @@ CLI / GUI / TUI / Web Dashboard / OpenAI clients
 
 - `zrouter.py`: compatibility facade, CLI, router application, request/response contracts.
 - `zrouter_core.py`: provider definitions, registry, and endpoint validation.
+- `zrouter_runtime.py`: thread-safe rate limiter, statistics persistence, TTL/LRU cache, and key masking primitives; `zrouter.py` re-exports the stable names.
 - `zrouter_bot_models.py`: bot enums and serializable domain models; this is the canonical definition module.
 - `zrouter_bot_storage.py`: local bot-home paths, vault persistence, and per-bot memory persistence.
 - `zrouter_bot.py`: bot services/managers and compatibility re-exports for model and storage types. Existing `from zrouter_bot import ...` imports remain supported.
