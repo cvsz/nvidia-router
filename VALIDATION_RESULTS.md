@@ -35,6 +35,16 @@ Evidence for the refactor implementation is tied to the exact tested code commit
 - Model discovery does not prove pricing. New models remain `free=false` and `pricing_status=unverified` until explicitly curated.
 - Remote plaintext HTTP provider endpoints are rejected; only loopback HTTP is allowed.
 
+## Phase 2 — bot model extraction
+
+- Scope: extract bot enums and 18 serializable domain models from `zrouter_bot.py` into `zrouter_bot_models.py`.
+- Compatibility: `zrouter_bot.py` re-exports the same names; no existing import path is intentionally removed.
+- Packaging: added the module to `pyproject.toml`, Docker runtime/web images, and Makefile lint/source bundle targets.
+- Regression coverage: added `test_zrouter_bot_models.py` for identity of compatibility re-exports and serialization round trips.
+- Current implementation commit: `83d7da4fd121f7b0092606d27824d8ef96e9f4c8`.
+- CI for this commit: **PENDING**. Do not treat Phase 2 as validated until the matching CI run passes.
+- Local execution: not run in this session.
+
 ## Evidence policy
 
 The automated results above apply to the validated code commit listed above. Any later code change requires a new validation run. Documentation-only updates do not change the tested runtime code.
